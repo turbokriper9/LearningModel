@@ -4,106 +4,89 @@ function App() {
   const [count, setCount] = useState(null);
   const [boxes, setBoxes] = useState([]);
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
-  // Запускаем камеру при загрузке компонента
+  // 1) Запуск камеры
   useEffect(() => {
     const startCamera = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (error) {
-        console.error("Ошибка доступа к камере:", error);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoRef.current.srcObject = stream;
+      } catch (e) {
+        console.error("Ошибка доступа к камере:", e);
       }
     };
-
     startCamera();
   }, []);
 
-  // Автоматическое обновление детекции каждые 5 секунд
+  // 2) Автодетект каждые 0.5 с
   useEffect(() => {
-    const interval = setInterval(() => {
-      handleDetect();
-    }, 1000); // 5000 мс = 5 секунд
-
-    return () => clearInterval(interval); // Очистка при размонтировании
+    const interval = setInterval(handleDetect, 500);
+    return () => clearInterval(interval);
   }, []);
 
+  // 3) Запрос к FastAPI
   const handleDetect = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/v1/detect-live");
-      const data = await response.json();
+      const res = await fetch("http://localhost:8000/api/v1/detect-live");
+      const data = await res.json();
       setCount(data.count);
       setBoxes(data.boxes || []);
-    } catch (error) {
-      console.error("Ошибка при получении данных:", error);
+    } catch (e) {
+      console.error("Ошибка при получении данных:", e);
     }
   };
 
+  // 4) Отрисовка боксов на canvas
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || boxes.length === 0) return;
+
+    // установим внутреннее разрешение канваса равным реальному потоку
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // теперь просто рисуем в тех же координатах, что и модель возвращает
+    boxes.forEach(({ xmin, ymin, xmax, ymax }) => {
+      ctx.strokeStyle = "red";
+      ctx.lineWidth   = 2;
+      ctx.strokeRect(xmin, ymin, xmax - xmin, ymax - ymin);
+    });
+  }, [boxes]);
+
   return (
-    <div
-      style={{
-        padding: "2rem",
-        fontFamily: "Arial, sans-serif",
-        maxWidth: "800px",
-        margin: "auto",
-      }}
-    >
-      <h1>
-        🎓 <b>YOLO Student Counter</b>
-      </h1>
+    <div style={{ padding: "2rem", textAlign: "center", fontFamily: "Arial, sans-serif" }}>
+      <h1>🎓 YOLO Student Counter</h1>
 
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        style={{ width: "100%", borderRadius: "10px", marginBottom: "1rem" }}
-      />
-
-      <button
-        onClick={handleDetect}
-        style={{
-          padding: "10px 20px",
-          backgroundColor: "#2563eb",
-          color: "white",
-          border: "none",
-          borderRadius: "5px",
-          cursor: "pointer",
-        }}
-      >
-        🎥 Обновить вручную
-      </button>
+      <div style={{ position: "relative", display: "inline-block" }}>
+        {/* видео */}
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          style={{ width: "640px", height: "auto" }}
+        />
+        {/* канвас с теми же CSS-размерами */}
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "640px",
+            height: "auto",
+            pointerEvents: "none",
+          }}
+        />
+      </div>
 
       {count !== null && (
-        <div style={{ marginTop: "1rem", fontSize: "18px" }}>
-          🧍 Найдено студентов: <b>{count}</b>
-        </div>
-      )}
-
-      {boxes.length > 0 && (
-        <div
-          style={{
-            backgroundColor: "#f3f4f6",
-            padding: "1rem",
-            marginTop: "1rem",
-            borderRadius: "8px",
-          }}
-        >
-          <b>📦 Координаты:</b>
-          <ul>
-            {boxes.map((box, index) => (
-              <li key={index}>
-                #{index + 1}: (xmin: {Math.round(box.xmin)}, ymin:{" "}
-                {Math.round(box.ymin)}, xmax: {Math.round(box.xmax)}, ymax:{" "}
-                {Math.round(box.ymax)})
-              </li>
-            ))}
-          </ul>
-        </div>
+        <p style={{ marginTop: "1rem", fontSize: "18px" }}>🧍 Найдено: {count}</p>
       )}
     </div>
   );

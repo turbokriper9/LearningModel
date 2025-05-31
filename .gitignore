@@ -1,43 +1,36 @@
 # Python
+*.pyc
 __pycache__/
-*.py[cod]
-*.so
-*.egg
-*.egg-info/
-dist/
-build/
+*.pyo
+*.pyd
+*.sqlite3
 .env
 .venv/
-env/
 venv/
-db.sqlite3
-
-# VSCode, PyCharm
-.vscode/
-.idea/
+*.log
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
 
-# OS files
-.DS_Store
-Thumbs.db
+# VSCode/PyCharm/IDE
+.vscode/
+.idea/
 
-# Node.js / React
+# Frontend
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+build/
+dist/
 
-# Production
-/build/
-/frontend/build/
-/frontend/node_modules/
-
-# Log files
-*.log
-
-# Model weights, large files
-runs/
+# Data/Weights/Models
 *.pt
 *.pth
+*.onnx
+*.ckpt
+*.h5
+runs/
+dataset/
+data/
+weights/
+
+# MacOS/OS
+.DS_Store

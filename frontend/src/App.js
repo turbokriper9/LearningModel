@@ -1,92 +1,113 @@
 import React, { useEffect, useRef, useState } from "react";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 function App() {
+  const [tab, setTab] = useState("main");
   const [count, setCount] = useState(null);
-  const [boxes, setBoxes] = useState([]);
+  const [stats, setStats] = useState([]);
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
 
-  // 1) Запуск камеры
+  // Камера и детекция (можно упростить если не нужна автодетекция)
   useEffect(() => {
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        videoRef.current.srcObject = stream;
-      } catch (e) {
-        console.error("Ошибка доступа к камере:", e);
-      }
-    };
-    startCamera();
-  }, []);
+    if (tab === "main") {
+      const startCamera = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        } catch (e) {
+          console.error("Ошибка доступа к камере:", e);
+        }
+      };
+      startCamera();
 
-  // 2) Автодетект каждые 0.5 с
+      // Опционально: автоматическая детекция (если нужен счетчик)
+      const interval = setInterval(handleDetect, 2000); // каждые 2 сек
+      return () => clearInterval(interval);
+    }
+  }, [tab]);
+
+  // Получение статистики при переключении во вкладку "Статистика"
   useEffect(() => {
-    const interval = setInterval(handleDetect, 500);
-    return () => clearInterval(interval);
-  }, []);
+    if (tab === "stats") {
+      fetch("http://localhost:8000/api/v1/attendance")
+        .then((res) => res.json())
+        .then((data) => setStats(Array.isArray(data) ? data : []))
+        .catch(() => setStats([]));
+    }
+  }, [tab]);
 
-  // 3) Запрос к FastAPI
   const handleDetect = async () => {
     try {
       const res = await fetch("http://localhost:8000/api/v1/detect-live");
       const data = await res.json();
       setCount(data.count);
-      setBoxes(data.boxes || []);
     } catch (e) {
-      console.error("Ошибка при получении данных:", e);
+      setCount(null);
     }
   };
 
-  // 4) Отрисовка боксов на canvas
-  useEffect(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas || boxes.length === 0) return;
+  // Готовим данные для графика
+  const chartData = {
+    labels: stats.map((item) => {
+      const date = new Date(item.timestamp);
+      return `${date.getHours()}:${date.getMinutes().toString().padStart(2, "0")}`;
+    }),
+    datasets: [
+      {
+        label: "Посещаемость",
+        data: stats.map((item) => item.count),
+        backgroundColor: "#2563eb",
+      },
+    ],
+  };
 
-    // установим внутреннее разрешение канваса равным реальному потоку
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // теперь просто рисуем в тех же координатах, что и модель возвращает
-    boxes.forEach(({ xmin, ymin, xmax, ymax }) => {
-      ctx.strokeStyle = "red";
-      ctx.lineWidth   = 2;
-      ctx.strokeRect(xmin, ymin, xmax - xmin, ymax - ymin);
-    });
-  }, [boxes]);
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: { position: "top" },
+      title: { display: true, text: "Статистика посещаемости по времени" },
+    },
+  };
 
   return (
-    <div style={{ padding: "2rem", textAlign: "center", fontFamily: "Arial, sans-serif" }}>
+    <div style={{ padding: "2rem", fontFamily: "Arial, sans-serif", textAlign: "center" }}>
       <h1>🎓 YOLO Student Counter</h1>
-
-      <div style={{ position: "relative", display: "inline-block" }}>
-        {/* видео */}
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          style={{ width: "640px", height: "auto" }}
-        />
-        {/* канвас с теми же CSS-размерами */}
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "640px",
-            height: "auto",
-            pointerEvents: "none",
-          }}
-        />
+      <div style={{ marginBottom: "1rem" }}>
+        <button onClick={() => setTab("main")} style={{ marginRight: "1rem" }}>
+          Камера
+        </button>
+        <button onClick={() => setTab("stats")}>Статистика</button>
       </div>
-
-      {count !== null && (
-        <p style={{ marginTop: "1rem", fontSize: "18px" }}>🧍 Найдено: {count}</p>
+      {tab === "main" && (
+        <div>
+          <video ref={videoRef} autoPlay muted playsInline style={{ width: "640px" }} />
+          {count !== null && (
+            <p style={{ marginTop: "1rem", fontSize: "18px" }}>🧍 Найдено: {count}</p>
+          )}
+        </div>
+      )}
+      {tab === "stats" && (
+        <div>
+          <h2>Посещаемость по времени</h2>
+          {Array.isArray(stats) && stats.length > 0 ? (
+            <Bar data={chartData} options={chartOptions} />
+          ) : (
+            <p>Нет данных для отображения</p>
+          )}
+        </div>
       )}
     </div>
   );

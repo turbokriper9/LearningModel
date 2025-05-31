@@ -2,7 +2,7 @@ from ultralytics import YOLO
 import cv2
 
 #модель YOLOv8
-model = YOLO("runs/detect/train2/weights/best.pt")
+model = YOLO("runs/detect/train3/weights/best.pt")
 
 def detect_people_from_camera():
     cap = cv2.VideoCapture(0)

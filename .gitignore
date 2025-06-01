@@ -34,3 +34,13 @@ weights/
 
 # MacOS/OS
 .DS_Store
+
+# SSH Keys
+*.pem
+*.key
+*.pub
+id_ed25519*
+id_rsa*
+ssh-keygen*
+ssh-keygen -t ed25519 -C turbokriper9@gmail.com
+ssh-keygen -t ed25519 -C turbokriper9@gmail.com.pub

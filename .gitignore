@@ -1,0 +1,46 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.sqlite3
+.env
+.venv/
+venv/
+*.log
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# VSCode/PyCharm/IDE
+.vscode/
+.idea/
+
+# Frontend
+node_modules/
+build/
+dist/
+
+# Data/Weights/Models
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.h5
+runs/
+dataset/
+data/
+weights/
+
+# MacOS/OS
+.DS_Store
+
+# SSH Keys
+*.pem
+*.key
+*.pub
+id_ed25519*
+id_rsa*
+ssh-keygen*
+ssh-keygen -t ed25519 -C turbokriper9@gmail.com
+ssh-keygen -t ed25519 -C turbokriper9@gmail.com.pub

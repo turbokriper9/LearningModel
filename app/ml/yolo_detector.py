@@ -1,8 +1,7 @@
 from ultralytics import YOLO
 import cv2
 
-#модель YOLOv8
-model = YOLO("runs/detect/train4/weights/yolov11.pt")
+model = YOLO("runs/detect/train/weights/finalyolov11.pt")
 
 def detect_people_from_camera():
     cap = cv2.VideoCapture(0)

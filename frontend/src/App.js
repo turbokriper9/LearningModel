@@ -15,29 +15,105 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 function App() {
   const [tab, setTab] = useState("main");
   const [count, setCount] = useState(null);
+  const [boxes, setBoxes] = useState([]);
   const [stats, setStats] = useState([]);
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
-  // Камера и детекция (можно упростить если не нужна автодетекция)
+  // Запуск камеры
   useEffect(() => {
-    if (tab === "main") {
-      const startCamera = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        } catch (e) {
-          console.error("Ошибка доступа к камере:", e);
+    if (tab !== "main") return;
+    let stream;
+    const startCamera = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
         }
-      };
-      startCamera();
-
-      // Опционально: автоматическая детекция (если нужен счетчик)
-      const interval = setInterval(handleDetect, 2000); // каждые 2 сек
-      return () => clearInterval(interval);
-    }
+      } catch (e) {
+        console.error("Ошибка доступа к камере:", e);
+      }
+    };
+    startCamera();
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
   }, [tab]);
+
+  // Детекция людей раз в 2 секунды
+  useEffect(() => {
+    if (tab !== "main") return;
+    let interval;
+    const detect = async () => {
+      const video = videoRef.current;
+      if (!video || !video.videoWidth || !video.videoHeight) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg");
+      try {
+        const res = await fetch("http://localhost:8000/api/v1/detect-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: dataUrl }),
+        });
+        const data = await res.json();
+        setCount(data.count);
+        setBoxes(data.boxes || []);
+      } catch (e) {
+        setCount(null);
+        setBoxes([]);
+      }
+    };
+    // Первый запуск после загрузки видео
+    const onLoaded = () => {
+      detect();
+      interval = setInterval(detect, 2000);
+    };
+    if (videoRef.current) {
+      videoRef.current.onloadedmetadata = onLoaded;
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+      if (videoRef.current) videoRef.current.onloadedmetadata = null;
+    };
+    // eslint-disable-next-line
+  }, [tab]);
+
+  // Рисование боксов и отладка
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    if (!video.videoWidth || !video.videoHeight) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "lime";
+    boxes.forEach((box) => {
+      ctx.strokeRect(
+        box.xmin,
+        box.ymin,
+        box.xmax - box.xmin,
+        box.ymax - box.ymin
+      );
+    });
+    // Отладка
+    console.log("video size:", video.videoWidth, video.videoHeight);
+    console.log("canvas size:", canvas.width, canvas.height);
+    console.log("boxes:", boxes);
+  }, [boxes, tab]);
+
+  // Дополнительная отладка: выводим обновление боксов
+  useEffect(() => {
+    console.log("boxes state updated:", boxes);
+  }, [boxes]);
 
   // Получение статистики при переключении во вкладку "Статистика"
   useEffect(() => {
@@ -48,16 +124,6 @@ function App() {
         .catch(() => setStats([]));
     }
   }, [tab]);
-
-  const handleDetect = async () => {
-    try {
-      const res = await fetch("http://localhost:8000/api/v1/detect-live");
-      const data = await res.json();
-      setCount(data.count);
-    } catch (e) {
-      setCount(null);
-    }
-  };
 
   // Готовим данные для графика
   const chartData = {
@@ -92,8 +158,29 @@ function App() {
         <button onClick={() => setTab("stats")}>Статистика</button>
       </div>
       {tab === "main" && (
-        <div>
-          <video ref={videoRef} autoPlay muted playsInline style={{ width: "640px" }} />
+        <div style={{ position: "relative", display: "inline-block" }}>
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            style={{ width: "640px", height: "480px" }}
+            width={640}
+            height={480}
+          />
+          <canvas
+            ref={canvasRef}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              pointerEvents: "none",
+              width: "640px",
+              height: "480px",
+            }}
+            width={640}
+            height={480}
+          />
           {count !== null && (
             <p style={{ marginTop: "1rem", fontSize: "18px" }}>🧍 Найдено: {count}</p>
           )}

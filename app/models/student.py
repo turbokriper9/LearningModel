@@ -11,7 +11,20 @@ class Student(Base):
     group = Column(String)
 
 class Attendance(Base):
+    """
+    Модель для хранения данных о посещаемости аудитории
+    """
     __tablename__ = "attendance"
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     count = Column(Integer)
+    
+    def to_dict(self):
+        """
+        Преобразует запись в словарь для API
+        """
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat(),
+            "count": self.count
+        }

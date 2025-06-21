@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from app.core.attendance_db import AttendanceLog, SessionLocal
+from app.core.database import get_db
+from app.models.student import Attendance
 from pydantic import BaseModel
 import datetime
 
@@ -17,21 +18,20 @@ class AttendanceRead(BaseModel):
     class Config:
         orm_mode = True
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@router.post("/attendance-log", response_model=AttendanceRead)
+@router.post("/attendance", response_model=AttendanceRead)
 def create_attendance(att: AttendanceCreate, db: Session = Depends(get_db)):
-    row = AttendanceLog(count=att.count)
+    """
+    Создать новую запись о посещаемости
+    """
+    row = Attendance(count=att.count)
     db.add(row)
     db.commit()
     db.refresh(row)
     return row
 
-@router.get("/attendance-log", response_model=list[AttendanceRead])
+@router.get("/attendance", response_model=list[AttendanceRead])
 def read_attendance(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(AttendanceLog).order_by(AttendanceLog.timestamp.desc()).offset(skip).limit(limit).all()
+    """
+    Получить историю посещаемости
+    """
+    return db.query(Attendance).order_by(Attendance.timestamp.desc()).offset(skip).limit(limit).all()

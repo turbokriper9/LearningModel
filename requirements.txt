@@ -5,3 +5,6 @@ pydantic>=1.10
 torch>=2.1.0
 opencv-python
 pandas
+ultralytics
+python-multipart
+numpy

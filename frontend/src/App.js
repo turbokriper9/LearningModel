@@ -221,8 +221,12 @@ function App() {
         return "Неверная дата";
       }
       
-      // Форматируем время как ЧЧ:ММ
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Форматируем время как ЧЧ:ММ, используя локальные настройки
+      return date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false // 24-часовой формат
+      });
     } catch (error) {
       console.error("Ошибка при форматировании даты:", error);
       return "Ошибка даты";
@@ -367,7 +371,12 @@ function App() {
   };
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "Arial, sans-serif", textAlign: "center", backgroundColor: "#f8f9fa" }}>
+    <div style={{ padding: "2rem", fontFamily: "Arial, sans-serif", textAlign: "center", backgroundColor: "#f8f9fa", position: "relative" }}>
+      {/* Логотип в правом верхнем углу */}
+      <div style={{ position: "absolute", top: "10px", right: "10px", zIndex: "100" }}>
+        <img src="/images/URFU.png" alt="URFU Logo" style={{ height: "80px", width: "auto" }} />
+      </div>
+      
       <h1 style={{ color: "#333", marginBottom: "1.5rem" }}>🎓 YOLO Student Counter</h1>
       <div style={{ marginBottom: "1.5rem" }}>
         <button 

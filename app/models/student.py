@@ -1,14 +1,12 @@
-from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, DateTime, func
 from datetime import datetime
-
-Base = declarative_base()
+from app.core.database import Base
 
 class Student(Base):
     __tablename__ = "students"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    group = Column(String)
+    name = Column(String(100), index=True)
+    group = Column(String(50))
 
 class Attendance(Base):
     """
@@ -16,7 +14,7 @@ class Attendance(Base):
     """
     __tablename__ = "attendance"
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.now)
     count = Column(Integer)
     
     def to_dict(self):

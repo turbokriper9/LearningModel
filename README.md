@@ -12,7 +12,34 @@
   - `schemas/` - схемы Pydantic
 - `frontend/` - фронтенд на React
 
+## Требования
+
+- Python 3.8+
+- Node.js 14+
+- MySQL 5.7+ или MariaDB 10.5+
+
 ## Установка и запуск
+
+### База данных MySQL
+
+1. Установите MySQL или используйте XAMPP:
+   - MySQL: https://dev.mysql.com/downloads/installer/
+   - XAMPP: https://www.apachefriends.org/download.html
+
+2. Создайте базу данных с помощью скрипта:
+```
+python create_mysql_db.py
+```
+
+Или вручную через MySQL:
+```sql
+CREATE DATABASE attendance CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+3. При необходимости настройте подключение в файле `app/core/config.py`:
+```python
+DATABASE_URL = "mysql+pymysql://username:password@localhost/attendance"
+```
 
 ### Бэкенд
 
@@ -54,6 +81,29 @@ npm start
 - `GET /api/v1/attendance` - Получение истории посещаемости
 - `POST /api/v1/attendance` - Добавление записи о посещаемости
 
-## База данных
+## Работа с базой данных
 
-Проект использует SQLite для хранения данных. База данных создается автоматически при первом запуске.
+Для управления базой данных MySQL рекомендуется использовать:
+- phpMyAdmin (доступен через XAMPP)
+- MySQL Workbench: https://dev.mysql.com/downloads/workbench/
+- DBeaver: https://dbeaver.io/download/ (универсальный клиент для разных СУБД)
+
+## Миграции базы данных
+
+Для создания новой миграции:
+
+```
+alembic revision --autogenerate -m "описание изменений"
+```
+
+Для применения миграций:
+
+```
+alembic upgrade head
+```
+
+Для отката миграций:
+
+```
+alembic downgrade -1
+```

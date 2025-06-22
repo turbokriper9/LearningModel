@@ -1,1 +1,1 @@
-DATABASE_URL = "sqlite:///./attendance.db"
+DATABASE_URL = "mysql+pymysql://root:@localhost/attendance"

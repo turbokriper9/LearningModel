@@ -8,3 +8,7 @@ pandas
 ultralytics
 python-multipart
 numpy
+psycopg2-binary
+python-dotenv
+alembic
+pymysql

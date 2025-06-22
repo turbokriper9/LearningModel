@@ -16,7 +16,7 @@ router = APIRouter()
 # Переменные для отслеживания изменений в количестве людей
 last_count = None
 last_db_save_time = 0
-MIN_SAVE_INTERVAL = 5  # минимальный интервал между записями в БД (в секундах)
+MIN_SAVE_INTERVAL = 10  # минимальный интервал между записями в БД (в секундах)
 
 class DetectionResult(BaseModel):
     count: int
@@ -69,10 +69,11 @@ async def detect_image(request: ImageRequest, db: Session = Depends(get_db)):
         # Корректируем количество для статистики (вычитаем 1)
         adjusted_count = max(0, current_count - 1)
         
-        # Записываем в БД каждые 3 секунды, если скорректированное количество людей > 0
-        if adjusted_count > 0 and (current_time - last_db_save_time >= 3):
-            print(f"Сохраняем в БД: исходное количество = {current_count}, скорректированное = {adjusted_count}, время = {datetime.datetime.now()}")
-            attendance = Attendance(count=adjusted_count)
+        # Записываем в БД каждые 10 секунд, если скорректированное количество людей > 0
+        if adjusted_count > 0 and (current_time - last_db_save_time >= MIN_SAVE_INTERVAL):
+            now = datetime.datetime.now()
+            print(f"Сохраняем в БД: исходное количество = {current_count}, скорректированное = {adjusted_count}, время = {now}")
+            attendance = Attendance(count=adjusted_count, timestamp=now)
             db.add(attendance)
             db.commit()
             
@@ -97,13 +98,11 @@ async def attendance(db: Session = Depends(get_db)):
     
     print(f"Найдено {len(records)} записей с ненулевым количеством людей")
     
-    # Преобразуем время в локальный часовой пояс и форматируем
+    # Используем локальное время без преобразования из UTC
     result = []
     for rec in records:
-        # Преобразуем UTC время в локальное
-        local_time = rec.timestamp.replace(tzinfo=datetime.timezone.utc).astimezone()
         result.append({
-            "timestamp": local_time.isoformat(),
+            "timestamp": rec.timestamp.isoformat(),
             "count": rec.count
         })
     

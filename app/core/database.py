@@ -1,9 +1,14 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 from app.core.config import DATABASE_URL
-from app.models.student import Base
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Создаем базовый класс для моделей
+Base = declarative_base()
+
+# Создаем движок SQLAlchemy для MySQL
+# Удаляем параметр connect_args={"check_same_thread": False}, так как он нужен только для SQLite
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():

@@ -374,10 +374,10 @@ function App() {
     <div style={{ padding: "2rem", fontFamily: "Arial, sans-serif", textAlign: "center", backgroundColor: "#f8f9fa", position: "relative" }}>
       {/* Логотип в правом верхнем углу */}
       <div style={{ position: "absolute", top: "10px", right: "10px", zIndex: "100" }}>
-        <img src="/images/URFU.png" alt="URFU Logo" style={{ height: "80px", width: "auto" }} />
+        <img src="/images/URFU.png" alt="URFU Logo" style={{ height: "160px", width: "auto" }} />
       </div>
       
-      <h1 style={{ color: "#333", marginBottom: "1.5rem" }}>🎓 YOLO Student Counter</h1>
+      <h1 style={{ color: "#333", marginBottom: "1.5rem" }}>🎓 LAB AI DETECTOR</h1>
       <div style={{ marginBottom: "1.5rem" }}>
         <button 
           onClick={() => setTab("main")} 

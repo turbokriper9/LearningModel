@@ -28,31 +28,112 @@ function App() {
   const [stats, setStats] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [selectedCamera, setSelectedCamera] = useState(0);
+  const [videoDevices, setVideoDevices] = useState([]);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const detectTimeoutRef = useRef(null);
+  const streamRef = useRef(null);
+
+  // Получение списка доступных камер через MediaDevices API
+  useEffect(() => {
+    async function getVideoDevices() {
+      try {
+        // Запрашиваем разрешение на доступ к камере
+        await navigator.mediaDevices.getUserMedia({ video: true });
+        
+        // Получаем список всех медиа-устройств
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        
+        // Фильтруем только видеоустройства (камеры)
+        const videoDevs = devices.filter(device => device.kind === 'videoinput');
+        console.log("Доступные видеоустройства:", videoDevs);
+        
+        setVideoDevices(videoDevs);
+        setAvailableCameras(videoDevs.map((_, index) => index));
+      } catch (err) {
+        console.error("Ошибка при получении списка камер:", err);
+        setError("Не удалось получить список камер");
+      }
+    }
+
+    getVideoDevices();
+  }, []);
 
   // Запуск камеры
   useEffect(() => {
     if (tab !== "main") return;
-    let stream;
+    
       const startCamera = async () => {
         try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // Останавливаем предыдущий стрим, если он существует
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+        }
+        
+        console.log(`Пытаемся открыть камеру с индексом ${selectedCamera}`);
+        
+        // Определяем deviceId выбранной камеры
+        let constraints = { video: true };
+        
+        if (videoDevices.length > 0 && selectedCamera < videoDevices.length) {
+          const deviceId = videoDevices[selectedCamera].deviceId;
+          console.log(`Используем deviceId: ${deviceId}`);
+          constraints = {
+            video: { deviceId: { exact: deviceId } }
+          };
+        }
+        
+        // Запрашиваем доступ к выбранной камере
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamRef.current = stream;
+        
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
+        
+        setError(null);
         } catch (e) {
-          console.error("Ошибка доступа к камере:", e);
+        console.error(`Ошибка доступа к камере ${selectedCamera}:`, e);
+        setError(`Не удалось получить доступ к камере ${selectedCamera}`);
+        
+        // Пробуем запасной вариант с камерой 0, если выбрана другая камера
+        if (selectedCamera !== 0) {
+          try {
+            console.log("Пробуем запасной вариант с камерой 0");
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            streamRef.current = fallbackStream;
+            
+            if (videoRef.current) {
+              videoRef.current.srcObject = fallbackStream;
+              setError("Используется запасная камера (0)");
+            }
+          } catch (fallbackError) {
+            console.error("Ошибка доступа к запасной камере:", fallbackError);
+            setError("Не удалось получить доступ ни к одной камере");
+          }
         }
-      };
-      startCamera();
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [tab]);
+    
+      startCamera();
+    
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [tab, selectedCamera, videoDevices]);
+
+  // Обработчик переключения камеры
+  const handleCameraChange = (cameraId) => {
+    console.log(`Переключение на камеру ${cameraId}`);
+    setSelectedCamera(cameraId);
+    setError(null);
+    setBoxes([]);
+    setCount(null);
+  };
 
   // Детекция людей каждую секунду
   useEffect(() => {
@@ -60,18 +141,18 @@ function App() {
     
     const detect = async () => {
       try {
-        const video = videoRef.current;
-        if (!video || !video.videoWidth || !video.videoHeight) return;
+      const video = videoRef.current;
+      if (!video || !video.videoWidth || !video.videoHeight) return;
         
         setIsLoading(true);
         setError(null);
         
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg");
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg");
         
         const res = await fetch("http://localhost:8000/api/v1/detect-image", {
           method: "POST",
@@ -86,6 +167,9 @@ function App() {
         const data = await res.json();
         setCount(data.count);
         setBoxes(data.boxes || []);
+        if (data.error) {
+          setError(data.error);
+        }
       } catch (e) {
         console.error("Ошибка при распознавании:", e);
         setError("Ошибка распознавания");
@@ -109,7 +193,7 @@ function App() {
         detect();
       } else if (videoRef.current) {
         videoRef.current.onloadeddata = () => {
-          detect();
+      detect();
         };
       }
     };
@@ -121,7 +205,7 @@ function App() {
         clearTimeout(detectTimeoutRef.current);
       }
     };
-  }, [tab]);
+  }, [tab, selectedCamera]);
 
   // Рисование боксов и отладка
   useEffect(() => {
@@ -185,8 +269,8 @@ function App() {
   useEffect(() => {
     if (tab === "stats") {
       const fetchStats = () => {
-        fetch("http://localhost:8000/api/v1/attendance")
-          .then((res) => res.json())
+      fetch("http://localhost:8000/api/v1/attendance")
+        .then((res) => res.json())
           .then((data) => {
             if (Array.isArray(data)) {
               console.log("Получены данные статистики:", data);
@@ -248,8 +332,7 @@ function App() {
         pointHoverRadius: 7,
         pointBackgroundColor: "rgb(75, 192, 192)",
         pointBorderColor: "#fff",
-        pointBorderWidth: 2,
-      }
+      },
     ],
   };
 
@@ -370,255 +453,350 @@ function App() {
     }
   };
 
-  return (
-    <div style={{ padding: "2rem", fontFamily: "Arial, sans-serif", textAlign: "center", backgroundColor: "#f8f9fa", position: "relative" }}>
-      {/* Логотип в правом верхнем углу */}
-      <div style={{ position: "absolute", top: "10px", right: "10px", zIndex: "100" }}>
-        <img src="/images/URFU.png" alt="URFU Logo" style={{ height: "160px", width: "auto" }} />
+  // Компонент выбора камеры
+  const CameraSelector = () => {
+    return (
+      <div className="camera-selector">
+        <h3>Выбор камеры</h3>
+        <div className="camera-buttons">
+          {videoDevices.length > 0 ? (
+            videoDevices.map((device, index) => (
+              <button
+                key={device.deviceId}
+                onClick={() => handleCameraChange(index)}
+                className={selectedCamera === index ? "active" : ""}
+              >
+                {device.label || `Камера ${index}`}
+              </button>
+            ))
+          ) : (
+            <p>Поиск доступных камер...</p>
+          )}
+        </div>
       </div>
-      
-      <h1 style={{ color: "#333", marginBottom: "1.5rem" }}>🎓 LAB AI DETECTOR</h1>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <button 
-          onClick={() => setTab("main")} 
-          style={{ 
-            marginRight: "1rem", 
-            padding: "10px 20px", 
-            backgroundColor: tab === "main" ? "#4c6ef5" : "#e9ecef",
-            color: tab === "main" ? "white" : "#333",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            transition: "all 0.3s"
-          }}
-        >
+    );
+  };
+
+  return (
+    <div className="app">
+      <header>
+        <h1>
+          <img src="/images/URFU.png" alt="УрФУ" className="logo" />
+          Система подсчета студентов
+        </h1>
+        <div className="tabs">
+          <button
+            className={tab === "main" ? "active" : ""}
+            onClick={() => setTab("main")}
+          >
           Камера
         </button>
-        <button 
-          onClick={() => setTab("stats")} 
-          style={{ 
-            padding: "10px 20px", 
-            backgroundColor: tab === "stats" ? "#4c6ef5" : "#e9ecef",
-            color: tab === "stats" ? "white" : "#333",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            transition: "all 0.3s"
-          }}
-        >
-          Статистика
-        </button>
+          <button
+            className={tab === "stats" ? "active" : ""}
+            onClick={() => setTab("stats")}
+          >
+            Статистика
+          </button>
       </div>
-      {tab === "main" && (
-        <div style={{ position: "relative", display: "inline-block" }}>
+      </header>
+
+      <main>
+        {tab === "main" ? (
+          <div className="camera-tab">
+            <div className="camera-container">
+              <div className="video-wrapper">
           <video
             ref={videoRef}
             autoPlay
+                  playsInline
             muted
-            playsInline
-            style={{ 
-              width: "640px", 
-              height: "480px", 
-              borderRadius: "8px", 
-              boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" 
-            }}
-            width={640}
-            height={480}
-          />
-          <canvas
-            ref={canvasRef}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              pointerEvents: "none",
-              width: "640px",
-              height: "480px",
-              borderRadius: "8px"
-            }}
-            width={640}
-            height={480}
-          />
-          {isLoading && (
-            <div style={{ 
-              position: "absolute", 
-              top: "10px", 
-              right: "10px", 
-              background: "rgba(0,0,0,0.5)", 
-              color: "white",
-              padding: "5px 10px",
-              borderRadius: "5px"
-            }}>
-              Распознавание...
-            </div>
-          )}
-          {error && (
-            <div style={{ 
-              position: "absolute", 
-              top: "10px", 
-              right: "10px", 
-              background: "rgba(255,0,0,0.7)", 
-              color: "white",
-              padding: "5px 10px",
-              borderRadius: "5px"
-            }}>
-              {error}
-            </div>
-          )}
-          <div style={{ 
-            marginTop: "1rem", 
-            padding: "1rem", 
-            backgroundColor: "white", 
-            borderRadius: "8px",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-          }}>
-            <h3 style={{ margin: "0 0 0.5rem 0", color: "#333" }}>Информация о распознавании</h3>
-            <div style={{ display: "flex", justifyContent: "center", gap: "2rem" }}>
-              <div>
-                <p style={{ fontWeight: "bold", fontSize: "24px", margin: "0", color: "#4c6ef5" }}>
-                  🧍 Найдено: {count !== null ? count : "—"}
-                </p>
-                <p style={{ margin: "0.5rem 0 0 0", color: "#666" }}>
-                  Обнаруженных объектов
-                </p>
+                  className="camera-feed"
+                />
+                <canvas ref={canvasRef} className="detection-overlay" />
               </div>
-              <div>
-                <p style={{ fontWeight: "bold", fontSize: "24px", margin: "0", color: "#4c6ef5" }}>
-                  ⏱️ {new Date().toLocaleTimeString()}
-                </p>
-                <p style={{ margin: "0.5rem 0 0 0", color: "#666" }}>
-                  Текущее время
-                </p>
+              
+              <CameraSelector />
+              
+              <div className="detection-info">
+                {isLoading ? (
+                  <div className="loading">Распознавание...</div>
+                ) : error ? (
+                  <div className="error">{error}</div>
+                ) : count !== null ? (
+                  <div className="count">
+                    <span className="count-number">{count}</span>
+                    <span className="count-label">
+                      {count === 1
+                        ? "студент"
+                        : count >= 2 && count <= 4
+                        ? "студента"
+                        : "студентов"}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
-        </div>
-      )}
-      {tab === "stats" && (
-        <div style={{ maxWidth: "900px", margin: "0 auto" }}>
-          <h2 style={{ color: "#333", marginBottom: "1.5rem" }}>Статистика посещаемости</h2>
-          {Array.isArray(stats) && stats.length > 0 ? (
-            <>
-              <div style={{ 
-                height: "400px", 
-                backgroundColor: "white", 
-                padding: "20px", 
-                borderRadius: "8px",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                marginBottom: "2rem"
-              }}>
-                <Line data={chartData} options={chartOptions} />
-              </div>
-              
-              <div style={{ 
-                marginTop: "1.5rem", 
-                padding: "1.5rem", 
-                backgroundColor: "white", 
-                borderRadius: "8px",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-              }}>
-                <h3 style={{ margin: "0 0 1rem 0", color: "#333" }}>Сводная информация</h3>
-                <div style={{ display: "flex", justifyContent: "center", gap: "2rem", flexWrap: "wrap" }}>
-                  <div style={{ 
-                    padding: "15px", 
-                    backgroundColor: "#f1f3f9", 
-                    borderRadius: "8px", 
-                    minWidth: "150px" 
-                  }}>
-                    <p style={{ fontWeight: "bold", fontSize: "28px", margin: "0", color: "#4c6ef5" }}>
-                      {stats.length > 0 ? Math.max(...stats.map(s => s.count)) : 0}
-                    </p>
-                    <p style={{ margin: "0.5rem 0 0 0", color: "#666" }}>
-                      Максимальное количество
-                    </p>
-                  </div>
-                  <div style={{ 
-                    padding: "15px", 
-                    backgroundColor: "#f1f3f9", 
-                    borderRadius: "8px", 
-                    minWidth: "150px" 
-                  }}>
-                    <p style={{ fontWeight: "bold", fontSize: "28px", margin: "0", color: "#4c6ef5" }}>
-                      {stats.length > 0 ? Math.round(stats.reduce((acc, s) => acc + s.count, 0) / stats.length) : 0}
-                    </p>
-                    <p style={{ margin: "0.5rem 0 0 0", color: "#666" }}>
-                      Среднее количество
-                    </p>
-                  </div>
-                  <div style={{ 
-                    padding: "15px", 
-                    backgroundColor: "#f1f3f9", 
-                    borderRadius: "8px", 
-                    minWidth: "150px" 
-                  }}>
-                    <p style={{ fontWeight: "bold", fontSize: "28px", margin: "0", color: "#4c6ef5" }}>
-                      {stats.length > 0 ? stats[0].count : 0}
-                    </p>
-                    <p style={{ margin: "0.5rem 0 0 0", color: "#666" }}>
-                      Последнее измерение
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <div style={{ marginTop: "2rem" }}>
-                <h3 style={{ color: "#333", marginBottom: "1rem" }}>История измерений</h3>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ 
-                    width: "100%", 
-                    borderCollapse: "collapse", 
-                    backgroundColor: "white",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                    borderRadius: "8px",
-                    overflow: "hidden"
-                  }}>
-                    <thead>
-                      <tr style={{ backgroundColor: "#4c6ef5", color: "white" }}>
-                        <th style={{ padding: "12px", textAlign: "left" }}>№</th>
-                        <th style={{ padding: "12px", textAlign: "left" }}>Дата и время</th>
-                        <th style={{ padding: "12px", textAlign: "center" }}>Количество студентов</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {stats.map((item, index) => (
-                        <tr key={index} style={{ backgroundColor: index % 2 === 0 ? "white" : "#f8f9fa" }}>
-                          <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>{index + 1}</td>
-                          <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>
-                            {new Date(item.timestamp).toLocaleString()}
-                          </td>
-                          <td style={{ 
-                            padding: "10px", 
-                            textAlign: "center", 
-                            borderBottom: "1px solid #eee",
-                            fontWeight: "bold",
-                            color: item.count > 0 ? "#4c6ef5" : "#888"
-                          }}>
-                            {item.count}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div style={{ 
-              padding: "3rem", 
-              backgroundColor: "white", 
-              borderRadius: "8px",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-              color: "#666",
-              textAlign: "center"
-            }}>
-              <p style={{ fontSize: "18px", marginBottom: "1rem" }}>Нет данных для отображения</p>
-              <p>Запустите распознавание в режиме камеры для сбора статистики</p>
-            </div>
+        ) : (
+          <div className="stats-tab">
+            <div className="chart-container">
+              <h2>График посещаемости</h2>
+              {stats.length > 0 ? (
+                <Line
+                  data={chartData}
+                  options={{
+                    responsive: true,
+                    plugins: {
+                      legend: {
+                        position: "top",
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: function (context) {
+                            return `Студентов: ${context.parsed.y}`;
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          stepSize: 1,
+                        },
+                        title: {
+                          display: true,
+                          text: "Количество студентов",
+                        },
+                      },
+                      x: {
+                        title: {
+                          display: true,
+                          text: "Время",
+                        },
+                      },
+                    },
+                  }}
+                />
+              ) : (
+                <p className="no-data">Нет данных для отображения</p>
           )}
         </div>
+
+            <div className="table-container">
+              <h2>Таблица посещаемости</h2>
+              {stats.length > 0 ? (
+                <table className="stats-table">
+                  <thead>
+                    <tr>
+                      <th>Время</th>
+                      <th>Количество студентов</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.map((item, index) => (
+                      <tr key={index}>
+                        <td>{formatDate(item.timestamp)}</td>
+                        <td>{item.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="no-data">Нет данных для отображения</p>
+              )}
+            </div>
+        </div>
       )}
+      </main>
+
+      <style jsx>{`
+        .app {
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 20px;
+          color: #333;
+        }
+        
+        header {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+        
+        h1 {
+          display: flex;
+          align-items: center;
+          font-size: 28px;
+          margin-bottom: 20px;
+        }
+        
+        .logo {
+          height: 40px;
+          margin-right: 15px;
+        }
+        
+        .tabs {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 20px;
+        }
+        
+        .tabs button {
+          padding: 10px 20px;
+          border: none;
+          border-radius: 5px;
+          background-color: #eee;
+          cursor: pointer;
+          font-size: 16px;
+          transition: all 0.3s;
+        }
+        
+        .tabs button.active {
+          background-color: #4CAF50;
+          color: white;
+        }
+        
+        .camera-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          width: 100%;
+        }
+        
+        .video-wrapper {
+          position: relative;
+          width: 100%;
+          max-width: 800px;
+          margin-bottom: 20px;
+        }
+        
+        .camera-feed {
+          width: 100%;
+          border-radius: 8px;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .detection-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+        }
+        
+        .detection-info {
+          margin-top: 20px;
+          text-align: center;
+        }
+        
+        .loading {
+          font-size: 18px;
+          color: #666;
+        }
+        
+        .error {
+          font-size: 18px;
+          color: #f44336;
+        }
+        
+        .count {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        
+        .count-number {
+          font-size: 48px;
+          font-weight: bold;
+          color: #4CAF50;
+        }
+        
+        .count-label {
+          font-size: 24px;
+          color: #666;
+        }
+        
+        .stats-tab {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 30px;
+        }
+        
+        @media (min-width: 768px) {
+          .stats-tab {
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+        
+        .chart-container, .table-container {
+          background-color: white;
+          border-radius: 8px;
+          padding: 20px;
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        h2 {
+          margin-top: 0;
+          margin-bottom: 20px;
+          color: #333;
+        }
+        
+        .stats-table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        
+        .stats-table th, .stats-table td {
+          padding: 10px;
+          text-align: left;
+          border-bottom: 1px solid #ddd;
+        }
+        
+        .stats-table th {
+          background-color: #f5f5f5;
+          font-weight: bold;
+        }
+        
+        .no-data {
+          color: #666;
+          font-style: italic;
+        }
+        
+        .camera-selector {
+          margin: 15px 0;
+          text-align: center;
+        }
+        
+        .camera-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          justify-content: center;
+        }
+        
+        .camera-buttons button {
+          padding: 8px 15px;
+          background-color: #f0f0f0;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        
+        .camera-buttons button.active {
+          background-color: #4CAF50;
+          color: white;
+          border-color: #4CAF50;
+        }
+        
+        .camera-buttons button:hover:not(.active) {
+          background-color: #e0e0e0;
+        }
+      `}</style>
     </div>
   );
 }

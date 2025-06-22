@@ -57,6 +57,29 @@ demo_last_update = 0
 demo_update_interval = 2  # Обновляем демо-данные каждые 2 секунды
 demo_count = 2
 
+# Функция для получения списка доступных камер
+def get_available_cameras(max_cameras=10):
+    """
+    Проверяет доступные камеры в системе
+    
+    Args:
+        max_cameras: Максимальное количество камер для проверки
+        
+    Returns:
+        list: Список доступных индексов камер
+    """
+    available_cameras = []
+    for i in range(max_cameras):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            available_cameras.append(i)
+            cap.release()
+        else:
+            cap.release()
+    
+    print(f"Доступные камеры: {available_cameras}")
+    return available_cameras
+
 def get_demo_data():
     """
     Генерирует демо-данные с случайными вариациями
@@ -85,25 +108,79 @@ def get_demo_data():
     
     return {"count": demo_count, "boxes": boxes}
 
-def detect_people_from_camera():
+def detect_people_from_camera(camera_id=0):
     """
     Обнаружение людей с камеры в реальном времени
+    
+    Args:
+        camera_id: Индекс камеры (0 - встроенная камера, 1+ - внешние камеры)
+        
+    Returns:
+        dict: Словарь с количеством обнаруженных людей и координатами рамок
     """
     try:
         # Если модель не загружена, возвращаем демо-данные с вариациями
         if model is None:
             print("Модель не загружена, используем демо-данные для камеры")
             return get_demo_data()
-            
-        cap = cv2.VideoCapture(0)
+        
+        print(f"Пытаемся открыть камеру с индексом {camera_id}")
+        
+        # Пробуем несколько раз открыть камеру для большей надежности
+        max_attempts = 3
+        cap = None
+        
+        for attempt in range(max_attempts):
+            try:
+                cap = cv2.VideoCapture(camera_id)
+                if cap.isOpened():
+                    print(f"Камера {camera_id} успешно открыта (попытка {attempt+1})")
+                    break
+                else:
+                    print(f"Не удалось открыть камеру {camera_id} (попытка {attempt+1})")
+                    if cap:
+                        cap.release()
+                    time.sleep(0.5)  # Небольшая пауза перед следующей попыткой
+            except Exception as e:
+                print(f"Ошибка при попытке открыть камеру {camera_id}: {str(e)}")
+                if cap:
+                    cap.release()
+                time.sleep(0.5)
+        
+        # Если не удалось открыть камеру после всех попыток
+        if cap is None or not cap.isOpened():
+            print(f"Ошибка: Не удалось открыть камеру с индексом {camera_id} после {max_attempts} попыток")
+            # Пробуем открыть камеру с индексом 0 в качестве запасного варианта
+            if camera_id != 0:
+                print("Пробуем открыть камеру с индексом 0")
+                cap = cv2.VideoCapture(0)
+                if not cap.isOpened():
+                    print("Ошибка: Не удалось открыть камеру с индексом 0")
+                    return {"count": 0, "boxes": [], "error": f"Не удалось открыть камеру {camera_id}", "camera_id": camera_id}
+            else:
+                return {"count": 0, "boxes": [], "error": "Не удалось открыть камеру", "camera_id": camera_id}
+        
+        # Получаем информацию о камере
+        width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        print(f"Камера {camera_id}: разрешение {width}x{height}, FPS: {fps}")
+        
+        # Читаем кадр
         success, frame = cap.read()
         cap.release()
 
         if not success:
-            print("Ошибка: Не удалось получить кадр с камеры")
-            return {"count": 0, "boxes": []}
+            print(f"Ошибка: Не удалось получить кадр с камеры {camera_id}")
+            return {"count": 0, "boxes": [], "error": f"Не удалось получить кадр с камеры {camera_id}", "camera_id": camera_id}
 
-        print(f"Запуск детекции на кадре с камеры размером {frame.shape}")
+        print(f"Запуск детекции на кадре с камеры {camera_id} размером {frame.shape}")
+        
+        # Для отладки сохраняем кадр
+        debug_path = f"camera_{camera_id}_debug.jpg"
+        cv2.imwrite(debug_path, frame)
+        print(f"Сохранено отладочное изображение: {debug_path}")
+
         results = model(frame)
         
         # Получаем информацию о модели
@@ -141,11 +218,11 @@ def detect_people_from_camera():
                     print(f"  - Добавлен объект: {x1},{y1} - {x2},{y2}")
         
         print(f"Итого обнаружено людей на кадре: {count}")
-        return {"count": count, "boxes": boxes}
+        return {"count": count, "boxes": boxes, "camera_id": camera_id}
     except Exception as e:
-        print(f"Ошибка при обнаружении людей с камеры: {str(e)}")
+        print(f"Ошибка при обнаружении людей с камеры {camera_id}: {str(e)}")
         traceback.print_exc()
-        return {"count": 0, "boxes": []}
+        return {"count": 0, "boxes": [], "error": str(e), "camera_id": camera_id}
 
 def detect_people_from_image(img):
     """

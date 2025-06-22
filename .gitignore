@@ -1,0 +1,64 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.sqlite3
+.env
+.venv/
+venv/
+*.log
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# VSCode/PyCharm/IDE
+.vscode/
+.idea/
+
+# Frontend
+node_modules/
+build/
+dist/
+
+# Data/Weights/Models
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.h5
+runs/
+dataset/
+data/
+weights/
+
+# MacOS/OS
+.DS_Store
+
+# SSH Keys
+*.pem
+*.key
+*.pub
+id_ed25519*
+id_rsa*
+ssh-keygen*
+ssh-keygen -t ed25519 -C turbokriper9@gmail.com
+ssh-keygen -t ed25519 -C turbokriper9@gmail.com.pub
+
+# Разрешаем файлы в папке yolo_camera_project
+!yolo_camera_project/**/*.pt
+!yolo_camera_project/**/*.pth
+!yolo_camera_project/**/*.onnx
+!yolo_camera_project/**/*.ckpt
+!yolo_camera_project/**/*.h5
+!yolo_camera_project/**/runs/
+!yolo_camera_project/**/dataset/
+!yolo_camera_project/**/data/
+!yolo_camera_project/**/weights/
+!yolo_camera_project/**/*.sqlite3
+!yolo_camera_project/**/db.sqlite3
+!yolo_camera_project/**/attendance.db
+
+# Игнорируем большие файлы весов, превышающие лимит GitHub
+yolo_camera_project/runs/detect/train/weights/finalyolov11.pt
+yolo_camera_project/runs/detect/train3/weights/yolov11ultra.pt

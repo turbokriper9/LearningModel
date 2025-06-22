@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 14
+names: ['Al Vincent C Acain', 'Alma T Ruiz', 'Anfernee C Seprado', 'Angelika A Guadez', 'Antoniette M Refulle', 'Carla E Dumas', 'James C Baron', 'Jane M Ludivese', 'Jay V Retaga', 'Jee Hannah C Cabasag', 'Jonalyn M Calimbo', 'Joshua V Almodiel', 'Mark Anthony B Nazareno', 'Queenie Mae A Carnicer']
+
+roboflow:
+  workspace: project-dohmk
+  project: student-attendance
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/project-dohmk/student-attendance/dataset/1

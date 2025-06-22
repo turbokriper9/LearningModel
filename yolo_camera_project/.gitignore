@@ -1,0 +1,48 @@
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+*.log
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# VSCode/PyCharm/IDE
+.vscode/
+.idea/
+
+# Frontend
+node_modules/
+build/
+dist/
+
+# MacOS/OS
+.DS_Store
+
+# SSH Keys
+*.pem
+*.key
+*.pub
+id_ed25519*
+id_rsa*
+ssh-keygen*
+ssh-keygen -t ed25519 -C turbokriper9@gmail.com
+ssh-keygen -t ed25519 -C turbokriper9@gmail.com.pub
+
+# Разрешаем загрузку весовых файлов и директорий
+!*.pt
+!*.pth
+!*.onnx
+!*.ckpt
+!*.h5
+!runs/
+!dataset/
+!data/
+!weights/
+!*.sqlite3
+!db.sqlite3
+!attendance.db

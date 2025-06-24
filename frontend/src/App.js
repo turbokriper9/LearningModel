@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
+import "./auth.css";
+import "./app.css";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,7 +26,22 @@ ChartJS.register(
 );
 
 function App() {
+  // Состояние для авторизации
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Проверка авторизации при загрузке
+  useEffect(() => {
+    const savedAuth = localStorage.getItem("isAuthenticated");
+    if (savedAuth === "true") {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  // Основное состояние приложения
   const [tab, setTab] = useState("main");
+  const [adminTab, setAdminTab] = useState("info"); // Текущая вкладка в панели администратора
+  const [teacherTab, setTeacherTab] = useState("attendance"); // Текущая вкладка в панели преподавателя
+  const [periodType, setPeriodType] = useState("day"); // Период для графика нагруженности (день, неделя, месяц)
   const [count, setCount] = useState(null);
   const [boxes, setBoxes] = useState([]);
   const [stats, setStats] = useState([]);
@@ -32,6 +49,14 @@ function App() {
   const [lessonStats, setLessonStats] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedLessonNumber, setSelectedLessonNumber] = useState(null);
+  const [selectedRoom, setSelectedRoom] = useState("");
+  const [manualCount, setManualCount] = useState("");
+  const [students, setStudents] = useState([
+    { id: 1, name: "Маннанов Данил Радикович", present: true },
+    { id: 2, name: "Ануфриев Денис Дмитриевич", present: false },
+    { id: 3, name: "Исаев Арсений Евгеньевич", present: true },
+    { id: 4, name: "Павлова Милана Андреевна", present: false }
+  ]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [availableCameras, setAvailableCameras] = useState([]);
@@ -70,6 +95,21 @@ function App() {
 
     getVideoDevices();
   }, []);
+
+  // Обработчик изменения камеры
+  const handleCameraChange = (cameraId) => {
+    console.log(`Переключение на камеру ${cameraId}`);
+    setSelectedCamera(cameraId);
+    
+    // Остановка текущего потока
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    
+    // Сброс счетчика
+    setCount(null);
+    setBoxes([]);
+  };
 
   // Запуск камеры
   useEffect(() => {
@@ -232,16 +272,6 @@ function App() {
     }
   }, [tab, count]);
 
-  // Обработчик переключения камеры
-  const handleCameraChange = (cameraId) => {
-    console.log(`Переключение на камеру ${cameraId}`);
-    setSelectedCamera(cameraId);
-    setError(null);
-    setBoxes([]);
-    setCount(null);
-    setLastSavedCount(null); // Сбрасываем сохраненное значение при смене камеры
-  };
-
   // Детекция людей каждую секунду
   useEffect(() => {
     if (tab !== "main") return;
@@ -251,17 +281,17 @@ function App() {
     
     const detect = async () => {
       try {
-        const video = videoRef.current;
-        if (!video || !video.videoWidth || !video.videoHeight) return;
+      const video = videoRef.current;
+      if (!video || !video.videoWidth || !video.videoHeight) return;
         
         setError(null);
         
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg");
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg");
         
         console.log("Отправка запроса на обнаружение...");
         
@@ -271,19 +301,19 @@ function App() {
         
         try {
           const res = await fetch("http://10.14.24.35:8000/api/v1/detect-image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: dataUrl }),
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: dataUrl }),
             signal: controller.signal
-          });
+        });
           
           clearTimeout(timeoutId); // Очищаем таймаут после успешного ответа
-          
-          if (!res.ok) {
-            throw new Error(`Ошибка запроса: ${res.status}`);
-          }
-          
-          const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(`Ошибка запроса: ${res.status}`);
+        }
+        
+        const data = await res.json();
           console.log("Получен ответ:", data);
           
           // Сбрасываем счетчик ошибок после успешного запроса
@@ -310,9 +340,9 @@ function App() {
             }
           }
           
-          setBoxes(data.boxes || []);
-          if (data.error) {
-            setError(data.error);
+        setBoxes(data.boxes || []);
+        if (data.error) {
+          setError(data.error);
           }
         } catch (fetchError) {
           clearTimeout(timeoutId);
@@ -352,7 +382,7 @@ function App() {
         detect();
       } else if (videoRef.current) {
         videoRef.current.onloadeddata = () => {
-          detect();
+      detect();
         };
       }
     };
@@ -424,78 +454,96 @@ function App() {
     console.log("boxes state updated:", boxes);
   }, [boxes]);
 
-  // Получение статистики при переключении во вкладку "Статистика"
+  // useEffect для загрузки статистики
   useEffect(() => {
-    if (tab === "stats") {
-      const fetchStats = () => {
-        // Формируем URL с параметрами для фильтрации
-        let url = "http://10.14.24.35:8000/api/v1/attendance";
-        const params = new URLSearchParams();
+    if (tab !== "stats") return;
+
+    setIsLoading(true);
+    setError(null);
+
+    const fetchStats = () => {
+      console.log(`Загрузка статистики: дата=${selectedDate}, пара=${selectedLessonNumber}`);
+      
+      // Формируем URL с параметрами для фильтрации
+      let url = "http://10.14.24.35:8000/api/v1/attendance";
+      const params = new URLSearchParams();
+      
+      if (selectedDate) {
+        params.append("date", selectedDate);
+        console.log(`Добавлен параметр date=${selectedDate}`);
+      }
+      
+      if (selectedLessonNumber !== null) {
+        params.append("lesson_number", selectedLessonNumber);
+        console.log(`Добавлен параметр lesson_number=${selectedLessonNumber}`);
+      }
+      
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+      
+      console.log(`Запрос к API: ${url}`);
+      
+      fetch(url)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            console.log("Получены данные статистики:", data);
+            setStats(data);
+          } else {
+            console.error("Неверный формат данных статистики:", data);
+            setStats([]);
+          }
+          setIsLoading(false);
+        })
+        .catch((error) => {
+          console.error("Ошибка при получении статистики:", error);
+          setStats([]);
+          setError("Ошибка при загрузке данных");
+          setIsLoading(false);
+        });
         
-        if (selectedDate) {
-          params.append("date", selectedDate);
-        }
+      // Если выбрана конкретная пара, получаем детальную статистику по ней
+      if (selectedLessonNumber !== null) {
+        const lessonStatsUrl = `http://10.14.24.35:8000/api/v1/attendance/lesson-stats?lesson_number=${selectedLessonNumber}${selectedDate ? `&date=${selectedDate}` : ''}`;
+        console.log(`Запрос статистики по паре: ${lessonStatsUrl}`);
         
-        if (selectedLessonNumber !== null) {
-          params.append("lesson_number", selectedLessonNumber);
-        }
-        
-        if (params.toString()) {
-          url += `?${params.toString()}`;
-        }
-        
-        fetch(url)
+        fetch(lessonStatsUrl)
           .then((res) => res.json())
           .then((data) => {
-            if (Array.isArray(data)) {
-              console.log("Получены данные статистики:", data);
-              setStats(data);
-            } else {
-              console.error("Неверный формат данных статистики:", data);
-              setStats([]);
-            }
+            console.log("Получены данные статистики по паре:", data);
+            setLessonStats(data);
           })
           .catch((error) => {
-            console.error("Ошибка при получении статистики:", error);
-            setStats([]);
+            console.error("Ошибка при получении статистики по паре:", error);
+            setLessonStats(null);
           });
-          
-        // Если выбрана конкретная пара, получаем детальную статистику по ней
-        if (selectedLessonNumber !== null) {
-          fetch(`http://10.14.24.35:8000/api/v1/attendance/lesson-stats?lesson_number=${selectedLessonNumber}${selectedDate ? `&date=${selectedDate}` : ''}`)
-            .then((res) => res.json())
-            .then((data) => {
-              console.log("Получены данные статистики по паре:", data);
-              setLessonStats(data);
-            })
-            .catch((error) => {
-              console.error("Ошибка при получении статистики по паре:", error);
-              setLessonStats(null);
-            });
-        } else {
-          // Если выбраны "Все пары", получаем общую статистику по парам
-          fetch(`http://10.14.24.35:8000/api/v1/attendance/daily-stats${selectedDate ? `?date=${selectedDate}` : ''}`)
-            .then((res) => res.json())
-            .then((data) => {
-              console.log("Получены данные статистики по парам:", data);
-              setDailyStats(data);
-            })
-            .catch((error) => {
-              console.error("Ошибка при получении статистики по парам:", error);
-              setDailyStats(null);
-            });
-        }
-      };
-      
-      // Загружаем статистику сразу
-      fetchStats();
-      
-      // И обновляем каждые 10 секунд
-      const interval = setInterval(fetchStats, 10000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [tab, selectedDate, selectedLessonNumber]);
+      } else {
+        // Если выбраны "Все пары", получаем общую статистику по парам
+        const dailyStatsUrl = `http://10.14.24.35:8000/api/v1/attendance/daily-stats${selectedDate ? `?date=${selectedDate}` : ''}`;
+        console.log(`Запрос общей статистики по парам: ${dailyStatsUrl}`);
+        
+        fetch(dailyStatsUrl)
+          .then((res) => res.json())
+          .then((data) => {
+            console.log("Получены данные статистики по парам:", data);
+            setDailyStats(data);
+          })
+          .catch((error) => {
+            console.error("Ошибка при получении статистики по парам:", error);
+            setDailyStats(null);
+          });
+      }
+    };
+    
+    // Загружаем статистику сразу
+    fetchStats();
+    
+    // И обновляем каждые 30 секунд (увеличили интервал для уменьшения нагрузки)
+    const interval = setInterval(fetchStats, 30000);
+    
+    return () => clearInterval(interval);
+  }, [tab, selectedDate, selectedLessonNumber]); // Явно указываем зависимости
 
   // Форматирование даты для отображения
   const formatDate = (isoString) => {
@@ -518,223 +566,253 @@ function App() {
     }
   };
 
-  // Готовим данные для линейного графика
-  const chartData = {
-    labels: stats.map((item) => formatDate(item.timestamp)).reverse(),
-    datasets: [
-      {
-        label: "Количество студентов",
-        data: stats.map((item) => item.count).reverse(),
-        fill: false,
-        borderColor: "rgb(75, 192, 192)",
-        tension: 0.4,
-        backgroundColor: "rgba(75, 192, 192, 0.5)",
-        pointRadius: 5,
-        pointHoverRadius: 7,
-        pointBackgroundColor: "rgb(75, 192, 192)",
-        pointBorderColor: "#fff",
-      },
-    ],
-  };
-
-  // Подготовка данных для графика посещаемости по парам
-  const lessonChartData = dailyStats ? {
-    labels: Object.keys(dailyStats.schedule).map(key => {
-      const lessonNum = key.split('_')[1];
-      return `${lessonNum} пара (${dailyStats.schedule[key]})`;
-    }),
-    datasets: [
-      {
-        label: "Максимальное количество студентов",
-        data: Object.keys(dailyStats.attendance).map(key => dailyStats.attendance[key]),
-        backgroundColor: "rgba(54, 162, 235, 0.6)",
-        borderColor: "rgb(54, 162, 235)",
-        borderWidth: 1,
-      },
-    ],
-  } : null;
-
-  // Подготовка данных для графика детальной статистики по конкретной паре
-  const lessonDetailChartData = lessonStats ? {
-    labels: lessonStats.time_series.map(item => formatDate(item.timestamp)),
-    datasets: [
-      {
-        label: "Количество студентов",
-        data: lessonStats.time_series.map(item => item.count),
-        fill: false,
-        borderColor: "rgb(255, 99, 132)",
-        tension: 0.4,
-        backgroundColor: "rgba(255, 99, 132, 0.5)",
-        pointRadius: 5,
-        pointHoverRadius: 7,
-        pointBackgroundColor: "rgb(255, 99, 132)",
-        pointBorderColor: "#fff",
-      },
-      {
-        label: "Максимальное количество",
-        data: lessonStats.time_series.map(() => lessonStats.max_count),
-        fill: false,
-        borderColor: "rgba(54, 162, 235, 0.6)",
-        borderDash: [5, 5],
-        pointRadius: 0,
-        tension: 0.4,
-      }
-    ],
-  } : null;
-
-  // Опции для графика посещаемости по парам
-  const lessonChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "top",
-      },
-      title: {
-        display: true,
-        text: `Посещаемость по парам на ${selectedDate || 'сегодня'}`,
-        font: {
-          size: 18,
-          weight: "bold"
-        },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          stepSize: 1,
-          precision: 0,
-        },
-        title: {
-          display: true,
-          text: "Количество студентов",
-        },
-      },
-      x: {
-        ticks: {
-          maxRotation: 45,
-          minRotation: 45,
-        },
-      },
-    },
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { 
-        position: "top",
-        labels: {
-          boxWidth: 15,
-          usePointStyle: true,
-          pointStyle: "circle",
-          font: {
-            size: 14,
-            weight: "bold"
-          }
-        }
-      },
-      title: { 
-        display: true, 
-        text: "Динамика количества студентов в аудитории",
-        font: {
-          size: 18,
-          weight: "bold"
-        },
-        color: "#333",
-        padding: {
-          top: 10,
-          bottom: 20
-        }
-      },
-      tooltip: {
-        mode: "index",
-        intersect: false,
-        backgroundColor: "rgba(0, 0, 0, 0.7)",
-        titleFont: {
-          size: 14,
-          weight: "bold"
-        },
-        bodyFont: {
-          size: 13
-        },
-        padding: 10,
-        callbacks: {
-          title: function(tooltipItems) {
-            return `Время: ${tooltipItems[0].label}`;
-          },
-          label: function(context) {
-            return `Студентов: ${context.parsed.y}`;
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          stepSize: 1,
-          precision: 0,
-          font: {
-            size: 12
-          },
-          color: "#666"
-        },
-        title: {
-          display: true,
-          text: "Количество студентов",
-          font: {
-            size: 14,
-            weight: "bold"
-          },
-          color: "#666"
-        },
-        grid: {
-          color: "rgba(0, 0, 0, 0.05)",
-          drawBorder: false
-        }
-      },
-      x: {
-        ticks: {
-          maxRotation: 45,
-          minRotation: 45,
-          font: {
-            size: 12
-          },
-          color: "#666"
-        },
-        title: {
-          display: true,
-          text: "Время",
-          font: {
-            size: 14,
-            weight: "bold"
-          },
-          color: "#666"
-        },
-        grid: {
-          display: false,
-          drawBorder: false
-        }
-      }
-    },
-    elements: {
-      line: {
-        borderWidth: 3,
-        tension: 0.4 // Делает линию более плавной (кривой)
-      }
-    },
-    interaction: {
-      mode: "nearest",
-      axis: "x",
-      intersect: false
-    },
-    animation: {
-      duration: 1000,
-      easing: "easeOutQuart"
+  // Функция для рендеринга статистики
+  const renderStats = () => {
+    if (isLoading) {
+      return <div className="loading">Загрузка данных...</div>;
     }
+    
+    if (error) {
+      return <div className="error">{error}</div>;
+    }
+    
+    if (!stats || stats.length === 0) {
+      return <p className="no-data">Нет данных для отображения</p>;
+    }
+
+    // Формирование данных для графика
+    const chartData = {
+      labels: stats.map(item => formatDate(item.timestamp)),
+      datasets: [
+        {
+          label: 'Количество студентов',
+          data: stats.map(item => item.count),
+          backgroundColor: 'rgba(76, 175, 80, 0.2)',
+          borderColor: 'rgba(76, 175, 80, 1)',
+          borderWidth: 2,
+        }
+      ]
+    };
+
+    const chartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { 
+          position: 'top',
+        },
+        title: { 
+          display: true, 
+          text: `График посещаемости ${selectedDate ? `за ${selectedDate}` : ''}`
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Количество студентов'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Время'
+          }
+        }
+      }
+    };
+
+    return (
+      <>
+        <div className="chart-container">
+          <h2>График посещаемости</h2>
+          <Line data={chartData} options={chartOptions} />
+        </div>
+
+        {/* Отображаем детальную статистику по конкретной паре */}
+        {lessonStats && selectedLessonNumber !== null && (
+          <div className="chart-container">
+            <h2>Динамика посещаемости {selectedLessonNumber} пары ({lessonStats.lesson_time})</h2>
+            <Line 
+              data={{
+                labels: lessonStats.time_series.map(item => formatDate(item.timestamp)),
+                datasets: [
+                  {
+                    label: 'Количество студентов',
+                    data: lessonStats.time_series.map(item => item.count),
+                    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                    borderColor: 'rgba(33, 150, 243, 1)',
+                    borderWidth: 2,
+                    tension: 0.3
+                  }
+                ]
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'top',
+                  },
+                  title: {
+                    display: true,
+                    text: `Максимальное количество: ${lessonStats.max_count} студентов`
+                  }
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    title: {
+                      display: true,
+                      text: 'Количество студентов'
+                    }
+                  },
+                  x: {
+                    title: {
+                      display: true,
+                      text: 'Время'
+                    }
+                  }
+                }
+              }}
+            />
+          </div>
+        )}
+
+        {/* Отображаем общую статистику по парам */}
+        {dailyStats && selectedLessonNumber === null && (
+          <div className="chart-container">
+            <h2>Посещаемость по парам</h2>
+            <Bar 
+              data={{
+                labels: Object.keys(dailyStats.attendance || {}).map(key => {
+                  const lessonNum = key.replace('lesson_', '');
+                  return `${lessonNum} пара (${dailyStats.schedule?.[key] || ''})`;
+                }),
+                datasets: [
+                  {
+                    label: 'Макс. количество студентов',
+                    data: Object.values(dailyStats.attendance || {}),
+                    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                    borderColor: 'rgba(76, 175, 80, 1)',
+                    borderWidth: 2,
+                  }
+                ]
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'top',
+                  },
+                  title: {
+                    display: true,
+                    text: `Максимальное количество студентов по парам (${dailyStats.date || 'сегодня'})`
+                  }
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    title: {
+                      display: true,
+                      text: 'Количество студентов'
+                    }
+                  }
+                }
+              }}
+            />
+          </div>
+        )}
+
+        <div className="table-container">
+          <h2>Таблица посещаемости</h2>
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th>Время</th>
+                <th>Пара</th>
+                <th>Количество студентов</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map((item, index) => (
+                <tr key={index}>
+                  <td>{formatDate(item.timestamp)}</td>
+                  <td>{item.lesson_number ? `${item.lesson_number} пара` : '-'}</td>
+                  <td>{item.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
+  };
+
+  // Компонент экрана авторизации
+  const LoginScreen = () => {
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [loginError, setLoginError] = useState("");
+    
+    // Обработчик авторизации
+    const handleLogin = (e) => {
+      e.preventDefault();
+      setLoginError("");
+      
+      // Проверка логина/пароля
+      if (username === "admin" && password === "123456") {
+        setIsAuthenticated(true);
+        localStorage.setItem("isAuthenticated", "true");
+      } else {
+        setLoginError("Неверный логин или пароль");
+      }
+    };
+    
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <img src="/images/URFU.png" alt="Логотип УрФУ" className="auth-logo" />
+          <h2 className="auth-title">Система учета посещаемости</h2>
+          
+          {loginError && <div className="error-message">{loginError}</div>}
+          
+          <form onSubmit={handleLogin} className="auth-form">
+            <div className="form-group">
+              <label htmlFor="username">Логин</label>
+              <input
+                type="text"
+                id="username"
+                className="form-control"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div className="form-group">
+              <label htmlFor="password">Пароль</label>
+              <input
+                type="password"
+                id="password"
+                className="form-control"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            
+            <button type="submit" className="btn">Войти</button>
+          </form>
+          
+          <div className="auth-hint">
+            Подсказка: логин: admin, пароль: 123456
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Компонент выбора камеры
@@ -793,16 +871,569 @@ function App() {
             <option value="8">8 пара (20:50-22:20)</option>
           </select>
         </div>
+      </div>
+    );
+  };
+
+  // Компонент панели администратора
+  const AdminPanel = () => {
+    return (
+      <div className="admin-panel">
+        <div className="admin-nav">
+          <button 
+            className={adminTab === "info" ? "active" : ""} 
+            onClick={() => setAdminTab("info")}
+          >
+            Информация
+          </button>
+          <button 
+            className={adminTab === "institute-load" ? "active" : ""} 
+            onClick={() => setAdminTab("institute-load")}
+          >
+            Нагруженность ИРИТ-РТФ
+          </button>
+          <button 
+            className={adminTab === "room-load" ? "active" : ""} 
+            onClick={() => setAdminTab("room-load")}
+          >
+            Нагруженность аудиторий
+          </button>
+        </div>
         
-        <div className="filter-info">
-          {selectedLessonNumber === null ? (
-            <span className="filter-hint">
-              <i className="info-icon">ℹ️</i> Отображается статистика по всем парам
-            </span>
-          ) : (
-            <span className="filter-hint">
-              <i className="info-icon">ℹ️</i> Отображается детальная статистика по {selectedLessonNumber} паре
-            </span>
+        <div className="admin-content">
+          {adminTab === "info" && (
+            <div className="admin-info">
+              <h2>Информационная панель</h2>
+              <div className="info-cards">
+                <div className="info-card">
+                  <h3>Общая статистика</h3>
+                  <div className="info-stat">
+                    <span className="stat-label">Всего аудиторий:</span>
+                    <span className="stat-value">42</span>
+                  </div>
+                  <div className="info-stat">
+                    <span className="stat-label">Активных камер:</span>
+                    <span className="stat-value">{videoDevices.length || 1}</span>
+                  </div>
+                  <div className="info-stat">
+                    <span className="stat-label">Записей в базе:</span>
+                    <span className="stat-value">{stats.length || 0}</span>
+                  </div>
+                </div>
+                
+                <div className="info-card">
+                  <h3>Текущая загруженность</h3>
+                  <div className="info-stat highlight">
+                    <span className="stat-label">Студентов в аудиториях:</span>
+                    <span className="stat-value">{count || "..."}</span>
+                  </div>
+                  <div className="info-stat">
+                    <span className="stat-label">Последнее обновление:</span>
+                    <span className="stat-value">{new Date().toLocaleTimeString()}</span>
+                  </div>
+                </div>
+                
+                <div className="info-card">
+                  <h3>Система</h3>
+                  <div className="info-stat">
+                    <span className="stat-label">Статус API:</span>
+                    <span className="stat-value success">Онлайн</span>
+                  </div>
+                  <div className="info-stat">
+                    <span className="stat-label">Модель ИИ:</span>
+                    <span className="stat-value">YOLOv8</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {adminTab === "institute-load" && (
+            <div className="admin-institute-load">
+              <h2>График нагруженности ИРИТ-РТФ</h2>
+              
+              <div className="period-selector">
+                <button 
+                  className={periodType === "day" ? "active" : ""} 
+                  onClick={() => setPeriodType("day")}
+                >
+                  День
+                </button>
+                <button 
+                  className={periodType === "week" ? "active" : ""} 
+                  onClick={() => setPeriodType("week")}
+                >
+                  Неделя
+                </button>
+                <button 
+                  className={periodType === "month" ? "active" : ""} 
+                  onClick={() => setPeriodType("month")}
+                >
+                  Месяц
+                </button>
+              </div>
+              
+              <div className="chart-container">
+                {periodType === "day" && (
+                  <Line 
+                    data={{
+                      labels: ["8:00", "9:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00"],
+                      datasets: [
+                        {
+                          label: 'Количество студентов',
+                          data: [10, 120, 180, 210, 190, 150, 210, 250, 220, 180, 130, 90, 40],
+                          backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                          borderColor: 'rgba(33, 150, 243, 1)',
+                          borderWidth: 2,
+                          tension: 0.3
+                        }
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'top',
+                        },
+                        title: {
+                          display: true,
+                          text: `Нагруженность ИРИТ-РТФ за ${selectedDate}`
+                        }
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          title: {
+                            display: true,
+                            text: 'Количество студентов'
+                          }
+                        },
+                        x: {
+                          title: {
+                            display: true,
+                            text: 'Время'
+                          }
+                        }
+                      }
+                    }}
+                  />
+                )}
+                
+                {periodType === "week" && (
+                  <Line 
+                    data={{
+                      labels: ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"],
+                      datasets: [
+                        {
+                          label: 'Средняя нагруженность',
+                          data: [180, 210, 190, 220, 170, 120],
+                          backgroundColor: 'rgba(156, 39, 176, 0.2)',
+                          borderColor: 'rgba(156, 39, 176, 1)',
+                          borderWidth: 2,
+                          tension: 0.3
+                        },
+                        {
+                          label: 'Максимальная нагруженность',
+                          data: [250, 280, 260, 290, 240, 180],
+                          backgroundColor: 'rgba(233, 30, 99, 0.2)',
+                          borderColor: 'rgba(233, 30, 99, 1)',
+                          borderWidth: 2,
+                          tension: 0.3
+                        }
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'top',
+                        },
+                        title: {
+                          display: true,
+                          text: 'Нагруженность ИРИТ-РТФ по дням недели'
+                        }
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          title: {
+                            display: true,
+                            text: 'Количество студентов'
+                          }
+                        }
+                      }
+                    }}
+                  />
+                )}
+                
+                {periodType === "month" && (
+                  <Bar
+                    data={{
+                      labels: ["Неделя 1", "Неделя 2", "Неделя 3", "Неделя 4"],
+                      datasets: [
+                        {
+                          label: 'Средняя нагруженность',
+                          data: [190, 200, 210, 180],
+                          backgroundColor: 'rgba(0, 150, 136, 0.2)',
+                          borderColor: 'rgba(0, 150, 136, 1)',
+                          borderWidth: 2
+                        },
+                        {
+                          label: 'Пиковая нагруженность',
+                          data: [270, 290, 300, 260],
+                          backgroundColor: 'rgba(255, 87, 34, 0.2)',
+                          borderColor: 'rgba(255, 87, 34, 1)',
+                          borderWidth: 2
+                        }
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'top',
+                        },
+                        title: {
+                          display: true,
+                          text: 'Нагруженность ИРИТ-РТФ по неделям'
+                        }
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          title: {
+                            display: true,
+                            text: 'Количество студентов'
+                          }
+                        }
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+          
+          {adminTab === "room-load" && (
+            <div className="admin-room-load">
+              <h2>График нагруженности аудиторий</h2>
+              
+              <div className="chart-container">
+                <Bar
+                  data={{
+                    labels: ["Р-237", "Р-239", "Р-241", "Р-243", "Р-245", "Р-247", "Р-249", "Р-251"],
+                    datasets: [
+                      {
+                        label: 'Средняя заполненность (%)',
+                        data: [85, 70, 90, 65, 75, 80, 60, 95],
+                        backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                        borderColor: 'rgba(76, 175, 80, 1)',
+                        borderWidth: 2
+                      }
+                    ]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: 'top',
+                      },
+                      title: {
+                        display: true,
+                        text: 'Средняя заполненность аудиторий'
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                          display: true,
+                          text: 'Заполненность (%)'
+                        }
+                      }
+                    }
+                  }}
+                />
+              </div>
+              
+              <div className="chart-container">
+                <Line
+                  data={{
+                    labels: ["8:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"],
+                    datasets: [
+                      {
+                        label: 'Р-237',
+                        data: [10, 85, 90, 80, 85, 70, 20],
+                        borderColor: 'rgba(33, 150, 243, 1)',
+                        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                        tension: 0.3
+                      },
+                      {
+                        label: 'Р-239',
+                        data: [5, 70, 75, 65, 80, 60, 10],
+                        borderColor: 'rgba(156, 39, 176, 1)',
+                        backgroundColor: 'rgba(156, 39, 176, 0.1)',
+                        tension: 0.3
+                      },
+                      {
+                        label: 'Р-241',
+                        data: [15, 90, 95, 85, 90, 75, 25],
+                        borderColor: 'rgba(76, 175, 80, 1)',
+                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        tension: 0.3
+                      }
+                    ]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: 'top',
+                      },
+                      title: {
+                        display: true,
+                        text: 'Динамика заполненности аудиторий в течение дня'
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                          display: true,
+                          text: 'Заполненность (%)'
+                        }
+                      },
+                      x: {
+                        title: {
+                          display: true,
+                          text: 'Время'
+                        }
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Компонент панели преподавателя
+  const TeacherPanel = () => {
+    // Обработчик изменения статуса присутствия студента
+    const handleTogglePresence = (studentId) => {
+      setStudents(students.map(student => 
+        student.id === studentId 
+          ? { ...student, present: !student.present } 
+          : student
+      ));
+    };
+
+    // Обработчик сохранения данных о посещаемости
+    const handleSaveAttendance = (e) => {
+      e.preventDefault();
+      
+      // Проверка заполнения обязательных полей
+      if (!selectedLessonNumber || !selectedRoom) {
+        alert("Пожалуйста, выберите пару и аудиторию");
+        return;
+      }
+      
+      // Подготовка данных для отправки
+      const attendanceData = {
+        lesson_number: selectedLessonNumber,
+        room: selectedRoom,
+        count: parseInt(manualCount) || 0,
+        date: selectedDate,
+        students: students.map(student => ({
+          id: student.id,
+          name: student.name,
+          present: student.present
+        }))
+      };
+      
+      // Здесь будет отправка данных на сервер
+      console.log("Отправка данных о посещаемости:", attendanceData);
+      
+      // Имитация успешного сохранения
+      setSavingStatus('success');
+      setTimeout(() => {
+        setSavingStatus(null);
+      }, 3000);
+    };
+
+    return (
+      <div className="teacher-panel">
+        <div className="teacher-nav">
+          <button 
+            className={teacherTab === "attendance" ? "active" : ""} 
+            onClick={() => setTeacherTab("attendance")}
+          >
+            Отметка посещаемости
+          </button>
+          <button 
+            className={teacherTab === "students" ? "active" : ""} 
+            onClick={() => setTeacherTab("students")}
+          >
+            Список студентов
+          </button>
+        </div>
+        
+        <div className="teacher-content">
+          {teacherTab === "attendance" && (
+            <div className="manual-attendance">
+              <h2>Ручная отметка посещаемости</h2>
+              
+              <form onSubmit={handleSaveAttendance} className="attendance-form">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="lesson-select">Пара:</label>
+                    <select 
+                      id="lesson-select" 
+                      value={selectedLessonNumber === null ? '' : selectedLessonNumber}
+                      onChange={(e) => setSelectedLessonNumber(e.target.value === '' ? null : Number(e.target.value))}
+                      required
+                    >
+                      <option value="">Выберите пару</option>
+                      <option value="1">1 пара (8:30-10:00)</option>
+                      <option value="2">2 пара (10:15-11:45)</option>
+                      <option value="3">3 пара (12:00-13:30)</option>
+                      <option value="4">4 пара (14:15-15:45)</option>
+                      <option value="5">5 пара (16:00-17:30)</option>
+                      <option value="6">6 пара (17:40-19:10)</option>
+                      <option value="7">7 пара (19:15-20:45)</option>
+                      <option value="8">8 пара (20:50-22:20)</option>
+                    </select>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label htmlFor="room-select">Аудитория:</label>
+                    <select 
+                      id="room-select" 
+                      value={selectedRoom}
+                      onChange={(e) => setSelectedRoom(e.target.value)}
+                      required
+                    >
+                      <option value="">Выберите аудиторию</option>
+                      <option value="Р-237">Р-237</option>
+                      <option value="Р-239">Р-239</option>
+                      <option value="Р-241">Р-241</option>
+                      <option value="Р-243">Р-243</option>
+                      <option value="Р-245">Р-245</option>
+                      <option value="Р-247">Р-247</option>
+                      <option value="Р-249">Р-249</option>
+                      <option value="Р-251">Р-251</option>
+                    </select>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label htmlFor="date-select">Дата:</label>
+                    <input 
+                      type="date" 
+                      id="date-select" 
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="manual-count">Количество студентов:</label>
+                  <input 
+                    type="number" 
+                    id="manual-count" 
+                    min="0"
+                    value={manualCount}
+                    onChange={(e) => setManualCount(e.target.value)}
+                    placeholder="Введите количество студентов"
+                  />
+                </div>
+                
+                <div className="student-list-container">
+                  <h3>Список студентов</h3>
+                  <table className="student-table">
+                    <thead>
+                      <tr>
+                        <th>№</th>
+                        <th>ФИО</th>
+                        <th>Статус</th>
+                        <th>Действие</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {students.map((student, index) => (
+                        <tr key={student.id} className={student.present ? "present" : "absent"}>
+                          <td>{index + 1}</td>
+                          <td>{student.name}</td>
+                          <td>{student.present ? "Присутствует" : "Отсутствует"}</td>
+                          <td>
+                            <button 
+                              type="button"
+                              className={`toggle-btn ${student.present ? "present" : "absent"}`}
+                              onClick={() => handleTogglePresence(student.id)}
+                            >
+                              {student.present ? "Отметить отсутствие" : "Отметить присутствие"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="form-actions">
+                  <button type="submit" className="save-btn">Сохранить</button>
+                  {savingStatus === 'success' && (
+                    <span className="save-status success">Данные успешно сохранены</span>
+                  )}
+                </div>
+              </form>
+            </div>
+          )}
+          
+          {teacherTab === "students" && (
+            <div className="students-list">
+              <h2>Список студентов</h2>
+              
+              <div className="search-container">
+                <input 
+                  type="text" 
+                  placeholder="Поиск по имени..." 
+                  className="search-input"
+                />
+              </div>
+              
+              <table className="student-table full-list">
+                <thead>
+                  <tr>
+                    <th>№</th>
+                    <th>ФИО</th>
+                    <th>Группа</th>
+                    <th>Посещаемость</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map((student, index) => (
+                    <tr key={student.id}>
+                      <td>{index + 1}</td>
+                      <td>{student.name}</td>
+                      <td>РИ-380022</td>
+                      <td>{student.present ? "85%" : "70%"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -810,6 +1441,10 @@ function App() {
   };
 
   return (
+    <div>
+      {!isAuthenticated ? (
+        <LoginScreen />
+      ) : (
     <div className="app">
       <header>
         <h1>
@@ -817,525 +1452,79 @@ function App() {
           Система подсчета студентов
         </h1>
         <div className="tabs">
-          <button
-            className={tab === "main" ? "active" : ""}
-            onClick={() => setTab("main")}
-          >
-          Камера
-        </button>
-          <button
-            className={tab === "stats" ? "active" : ""}
-            onClick={() => setTab("stats")}
-          >
-            Статистика
-          </button>
+              <button className={tab === "main" ? "active" : ""} onClick={() => setTab("main")}>Камера</button>
+              <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>Статистика</button>
+              <button className={tab === "admin" ? "active" : ""} onClick={() => setTab("admin")}>Панель администратора</button>
+              <button className={tab === "teacher" ? "active" : ""} onClick={() => setTab("teacher")}>Панель преподавателя</button>
+              <button onClick={() => {
+                setIsAuthenticated(false);
+                localStorage.removeItem("isAuthenticated");
+              }}>Выйти</button>
       </div>
       </header>
 
       <main>
-        {tab === "main" ? (
-          <div className="camera-tab">
+            <div id="main-tab" className="tab-content" style={{ display: tab === "main" ? "block" : "none" }}>
+              {/* Содержимое вкладки "Камера" */}
             <div className="camera-container">
               <div className="video-wrapper">
-          <video
-            ref={videoRef}
-            autoPlay
-                  playsInline
-            muted
-                  className="camera-feed"
-                />
-                <canvas ref={canvasRef} className="detection-overlay" />
+                  <video ref={videoRef} autoPlay playsInline muted></video>
+                  <canvas ref={canvasRef} className="detection-canvas"></canvas>
+                </div>
+                
+                <div className="detection-info">
+                  <div className="count">
+                    <span className="count-number">{count !== null ? count : "..."}</span>
+                    <span className="count-label">студентов</span>
+                    <div className="save-info">
+                      {savingStatus === 'saving' && (
+                        <span className="save-status">Сохранение...</span>
+                      )}
+                      {savingStatus === 'success' && (
+                        <span className="save-status success">Данные сохранены</span>
+                      )}
+                      {savingStatus === 'error' && (
+                        <span className="save-status error">Ошибка сохранения: {saveError}</span>
+                      )}
+                      <span className="save-hint">
+                        Данные сохраняются автоматически каждые 5 минут
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
               
               <CameraSelector />
-              
-              <div className="detection-info">
-                {error ? (
-                  <div className="error">{error}</div>
-                ) : (
-                  <div className="count">
-                    <span className="count-number">{count !== null ? Math.round(count) : '...'}</span>
-                    <span className="count-label">
-                      {count === null ? 'ожидание' :
-                        Math.round(count) === 1 ? "студент" :
-                        Math.round(count) >= 2 && Math.round(count) <= 4 ? "студента" :
-                        "студентов"
-                      }
-                    </span>
-                    <div className="save-info">
-                      {savingStatus === 'saving' ? (
-                        <span className="save-status saving">
-                          Сохранение данных...
-                        </span>
-                      ) : savingStatus === 'error' ? (
-                        <span className="save-status error">
-                          {saveError || "Ошибка сохранения"}
-                        </span>
-                      ) : lastSavedCount !== null ? (
-                        <span className="save-status success">
-                          Последнее сохранение: {lastSavedCount} {
-                            Math.round(lastSavedCount) === 1
-                            ? "студент"
-                            : Math.round(lastSavedCount) >= 2 && Math.round(lastSavedCount) <= 4
-                            ? "студента"
-                            : "студентов"
-                          }
-                        </span>
-                      ) : (
-                        <span className="save-status pending">
-                          Ожидание первого сохранения...
-                        </span>
-                      )}
-                      <span className="save-hint">
-                        Данные автоматически сохраняются каждые 5 секунд
-                      </span>
-                      <button 
-                        className="manual-save-btn"
-                        onClick={saveAttendanceData}
-                        disabled={savingStatus === 'saving'}
-                      >
-                        {savingStatus === 'saving' ? 'Сохранение...' : 'Сохранить сейчас'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
-          </div>
-        ) : (
-          <div className="stats-tab">
-            <StatsFilters />
             
-            <div className="chart-container">
-              <h2>График посещаемости</h2>
-              {stats.length > 0 ? (
-                <Line
-                  data={chartData}
-                  options={chartOptions}
-                />
+            <div id="stats-tab" className="tab-content" style={{ display: tab === "stats" ? "block" : "none" }}>
+              {/* Содержимое вкладки "Статистика" */}
+              <StatsFilters />
+              
+                {isLoading ? (
+                <div className="loading">Загрузка данных...</div>
+                ) : error ? (
+                  <div className="error">{error}</div>
               ) : (
-                <p className="no-data">Нет данных для отображения</p>
+                <div className="stats-content">
+                  {/* Графики и статистика */}
+                  {renderStats()}
+                </div>
               )}
             </div>
-
-            {selectedLessonNumber !== null && lessonStats ? (
-              <div className="chart-container">
-                <h2>
-                  Статистика {selectedLessonNumber} пары ({lessonStats.lesson_time})
-                  {lessonStats.max_count > 0 && (
-                    <span className="max-count-badge">
-                      Макс. количество: {lessonStats.max_count}
-                    </span>
-                  )}
-                </h2>
-                {lessonStats.time_series.length > 0 ? (
-                  <Line 
-                    data={lessonDetailChartData} 
-                    options={{
-                      ...chartOptions,
-                      plugins: {
-                        ...chartOptions.plugins,
-                        title: {
-                          ...chartOptions.plugins.title,
-                          text: `Динамика посещаемости ${selectedLessonNumber} пары (${lessonStats.lesson_time})`
-                        }
-                      }
-                    }} 
-                  />
-                ) : (
-                  <p className="no-data">Нет данных для отображения</p>
-                )}
-              </div>
-            ) : (
-              <div className="chart-container">
-                <h2>Посещаемость по парам</h2>
-                {dailyStats ? (
-                  <Bar 
-                    data={lessonChartData} 
-                    options={lessonChartOptions} 
-                  />
-                ) : (
-                  <p className="no-data">Нет данных для отображения</p>
-                )}
-              </div>
-            )}
-
-            <div className="table-container">
-              <h2>Таблица посещаемости</h2>
-              {stats.length > 0 ? (
-                <table className="stats-table">
-                  <thead>
-                    <tr>
-                      <th>Время</th>
-                      <th>Пара</th>
-                      <th>Количество студентов</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.map((item, index) => (
-                      <tr key={index}>
-                        <td>{formatDate(item.timestamp)}</td>
-                        <td>{item.lesson_number ? `${item.lesson_number} пара` : '-'}</td>
-                        <td>{item.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="no-data">Нет данных для отображения</p>
-              )}
+            
+            <div id="admin-tab" className="tab-content" style={{ display: tab === "admin" ? "block" : "none" }}>
+              {/* Содержимое вкладки "Панель администратора" */}
+              <AdminPanel />
             </div>
+            
+            <div id="teacher-tab" className="tab-content" style={{ display: tab === "teacher" ? "block" : "none" }}>
+              {/* Содержимое вкладки "Панель преподавателя" */}
+              <TeacherPanel />
+            </div>
+          </main>
         </div>
       )}
-      </main>
-
-      <style jsx>{`
-        .app {
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 20px;
-          color: #333;
-        }
-        
-        header {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-        
-        h1 {
-          display: flex;
-          align-items: center;
-          font-size: 28px;
-          margin-bottom: 20px;
-        }
-        
-        .logo {
-          height: 40px;
-          margin-right: 15px;
-        }
-        
-        .tabs {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 20px;
-        }
-        
-        .tabs button {
-          padding: 10px 20px;
-          border: none;
-          border-radius: 5px;
-          background-color: #eee;
-          cursor: pointer;
-          font-size: 16px;
-          transition: all 0.3s;
-        }
-        
-        .tabs button.active {
-          background-color: #4CAF50;
-          color: white;
-        }
-        
-        .camera-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          width: 100%;
-        }
-        
-        .video-wrapper {
-          position: relative;
-          width: 100%;
-          max-width: 800px;
-          margin-bottom: 20px;
-        }
-        
-        .camera-feed {
-          width: 100%;
-          border-radius: 8px;
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-        
-        .detection-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          pointer-events: none;
-        }
-        
-        .detection-info {
-          margin-top: 20px;
-          text-align: center;
-        }
-        
-        .loading {
-          font-size: 18px;
-          color: #666;
-        }
-        
-        .error {
-          font-size: 18px;
-          color: #f44336;
-        }
-        
-        .count {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          min-height: 200px; /* Фиксированная минимальная высота блока */
-          background-color: #f8f8f8;
-          border-radius: 15px;
-          padding: 20px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-          margin-top: 20px;
-          width: 100%;
-          max-width: 400px;
-          margin: 0 auto;
-        }
-        
-        .count-number {
-          font-size: 72px;
-          font-weight: bold;
-          color: #4CAF50;
-          transition: all 0.5s ease-in-out;
-          min-width: 150px;
-          min-height: 90px; /* Фиксированная минимальная высота для цифры */
-          text-align: center;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          animation: fadeNumber 0.5s ease-out;
-          margin: 10px 0;
-          border-radius: 20px;
-          background-color: rgba(76, 175, 80, 0.1);
-          padding: 15px 25px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        
-        @keyframes fadeNumber {
-          from { opacity: 0.5; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        
-        .count-label {
-          font-size: 28px;
-          color: #666;
-          margin-bottom: 20px;
-          transition: color 0.5s ease-in-out;
-          min-width: 180px;
-          min-height: 40px; /* Фиксированная минимальная высота для подписи */
-          text-align: center;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        
-        .save-info {
-          margin-top: 15px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-          background-color: #f9f9f9;
-          padding: 15px;
-          border-radius: 10px;
-          width: 100%;
-          max-width: 300px;
-          border: 1px solid #eee;
-        }
-        
-        .save-status {
-          font-size: 14px;
-          font-weight: 500;
-          transition: opacity 0.3s ease;
-        }
-        
-        .save-status.success {
-          color: #2e7d32;
-        }
-        
-        .save-status.saving {
-          color: #1976d2;
-        }
-        
-        .save-status.error {
-          color: #d32f2f;
-        }
-        
-        .save-status.pending {
-          color: #f57c00;
-        }
-        
-        .save-hint {
-          font-size: 12px;
-          color: #757575;
-          font-style: italic;
-          margin-bottom: 8px;
-        }
-        
-        .manual-save-btn {
-          padding: 6px 12px;
-          background-color: #4CAF50;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 14px;
-          transition: all 0.2s;
-        }
-        
-        .manual-save-btn:hover {
-          background-color: #3e8e41;
-        }
-        
-        .manual-save-btn:disabled {
-          background-color: #cccccc;
-          cursor: not-allowed;
-        }
-        
-        .stats-tab {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 30px;
-        }
-        
-        @media (min-width: 768px) {
-          .stats-tab {
-            grid-template-columns: 1fr 1fr;
-          }
-        }
-        
-        .stats-filters {
-          grid-column: 1 / -1;
-          display: flex;
-          gap: 20px;
-          flex-wrap: wrap;
-          background-color: #f5f5f5;
-          padding: 15px;
-          border-radius: 8px;
-          margin-bottom: 10px;
-        }
-        
-        .filter-item {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-        }
-        
-        .filter-item label {
-          font-weight: bold;
-          font-size: 14px;
-        }
-        
-        .filter-item input, .filter-item select {
-          padding: 8px;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-          background-color: white;
-        }
-        
-        .filter-info {
-          grid-column: 1 / -1;
-          margin-top: 10px;
-          text-align: center;
-        }
-        
-        .filter-hint {
-          font-size: 13px;
-          color: #555;
-          background-color: #f5f5f5;
-          padding: 5px 10px;
-          border-radius: 4px;
-          display: inline-block;
-        }
-        
-        .info-icon {
-          margin-right: 5px;
-          font-style: normal;
-        }
-        
-        .chart-container, .table-container {
-          background-color: white;
-          border-radius: 8px;
-          padding: 20px;
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-          height: 400px;
-          overflow: auto;
-        }
-        
-        h2 {
-          margin-top: 0;
-          margin-bottom: 20px;
-          color: #333;
-        }
-        
-        .stats-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        
-        .stats-table th, .stats-table td {
-          padding: 10px;
-          text-align: left;
-          border-bottom: 1px solid #ddd;
-        }
-        
-        .stats-table th {
-          background-color: #f5f5f5;
-          font-weight: bold;
-        }
-        
-        .no-data {
-          color: #666;
-          font-style: italic;
-        }
-        
-        .camera-selector {
-          margin: 15px 0;
-          text-align: center;
-        }
-        
-        .camera-buttons {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          justify-content: center;
-        }
-        
-        .camera-buttons button {
-          padding: 8px 15px;
-          background-color: #f0f0f0;
-          border: 1px solid #ddd;
-          border-radius: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        
-        .camera-buttons button.active {
-          background-color: #4CAF50;
-          color: white;
-          border-color: #4CAF50;
-        }
-        
-        .camera-buttons button:hover:not(.active) {
-          background-color: #e0e0e0;
-        }
-        
-        .max-count-badge {
-          display: inline-block;
-          margin-left: 15px;
-          padding: 5px 10px;
-          background-color: #4CAF50;
-          color: white;
-          border-radius: 15px;
-          font-size: 14px;
-          font-weight: normal;
-        }
-      `}</style>
     </div>
   );
 }

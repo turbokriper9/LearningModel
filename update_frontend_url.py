@@ -1,6 +1,19 @@
 import os
 import re
 import sys
+import socket
+
+def get_local_ip():
+    """Получение локального IP-адреса компьютера"""
+    try:
+        # Создаем временное соединение для определения IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"  # В случае ошибки возвращаем localhost
 
 def update_api_url(file_path, old_url, new_url):
     """
@@ -47,8 +60,10 @@ def main():
     if len(sys.argv) > 1:
         new_url = sys.argv[1]
     else:
-        # Иначе запрашиваем у пользователя
-        new_url = input("Введите новый URL API (например, https://1234-abcd.ngrok.io): ")
+        # Получаем локальный IP-адрес
+        local_ip = get_local_ip()
+        new_url = f"http://{local_ip}:8000"
+        print(f"Используем локальный IP-адрес: {local_ip}")
     
     # Проверяем формат URL
     if not new_url.startswith("http"):
@@ -62,6 +77,7 @@ def main():
     success = update_api_url(file_path, old_url, new_url)
     
     if success:
+        print("\nURL API успешно обновлен на:", new_url)
         print("\nТеперь вы можете запустить фронтенд командой:")
         print("cd frontend && npm start")
 

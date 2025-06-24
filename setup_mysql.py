@@ -14,7 +14,7 @@ def setup_mysql_database():
     """
     Функция для создания базы данных MySQL, если она не существует
     """
-    try:
+try:
         # Подключаемся к серверу MySQL (без указания конкретной БД)
         connection = pymysql.connect(
             host=DB_HOST,

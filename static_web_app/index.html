@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система учета посещаемости студентов</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>
+                <img src="public/images/URFU.png" alt="УрФУ" class="logo">
+                Система подсчета студентов
+            </h1>
+            <div class="tabs">
+                <button class="active" onclick="showTab('main')">Камера</button>
+                <button onclick="showTab('stats')">Статистика</button>
+            </div>
+        </header>
+
+        <main>
+            <div id="main-tab" class="tab-content">
+                <div class="camera-container">
+                    <div class="video-wrapper">
+                        <div class="camera-placeholder">
+                            <p>Для работы с камерой посетите приложение локально</p>
+                            <p>Это демонстрационная версия системы</p>
+                        </div>
+                    </div>
+                    
+                    <div class="detection-info">
+                        <div class="count">
+                            <span class="count-number" id="counter">25</span>
+                            <span class="count-label">студентов</span>
+                            <div class="save-info">
+                                <span class="save-status success">
+                                    Демонстрационный режим
+                                </span>
+                                <span class="save-hint">
+                                    Данные обновляются каждые 5 секунд
+                                </span>
+                                <button class="manual-save-btn" onclick="updateDemoCount()">
+                                    Обновить данные
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="stats-tab" class="tab-content" style="display: none;">
+                <div class="stats-filters">
+                    <div class="filter-item">
+                        <label for="date-filter">Дата:</label>
+                        <input type="date" id="date-filter" value="2025-06-24">
+                    </div>
+                    
+                    <div class="filter-item">
+                        <label for="lesson-filter">Пара:</label>
+                        <select id="lesson-filter">
+                            <option value="">Все пары (общая статистика)</option>
+                            <option value="1">1 пара (8:30-10:00)</option>
+                            <option value="2">2 пара (10:15-11:45)</option>
+                            <option value="3">3 пара (12:00-13:30)</option>
+                            <option value="4">4 пара (14:15-15:45)</option>
+                            <option value="5">5 пара (16:00-17:30)</option>
+                            <option value="6">6 пара (17:40-19:10)</option>
+                            <option value="7">7 пара (19:15-20:45)</option>
+                            <option value="8">8 пара (20:50-22:20)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h2>Демонстрационные данные посещаемости</h2>
+                    <div class="demo-chart">
+                        <div class="demo-bar" style="height: 80px;">
+                            <div class="demo-label">1 пара</div>
+                            <div class="demo-value">18</div>
+                        </div>
+                        <div class="demo-bar" style="height: 100px;">
+                            <div class="demo-label">2 пара</div>
+                            <div class="demo-value">22</div>
+                        </div>
+                        <div class="demo-bar" style="height: 120px;">
+                            <div class="demo-label">3 пара</div>
+                            <div class="demo-value">25</div>
+                        </div>
+                        <div class="demo-bar" style="height: 110px;">
+                            <div class="demo-label">4 пара</div>
+                            <div class="demo-value">23</div>
+                        </div>
+                        <div class="demo-bar" style="height: 90px;">
+                            <div class="demo-label">5 пара</div>
+                            <div class="demo-value">20</div>
+                        </div>
+                        <div class="demo-bar" style="height: 70px;">
+                            <div class="demo-label">6 пара</div>
+                            <div class="demo-value">15</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="info-container">
+                    <h2>О системе учета посещаемости</h2>
+                    <p>
+                        Данная система разработана для автоматического подсчета количества студентов в аудитории 
+                        с использованием компьютерного зрения и искусственного интеллекта.
+                    </p>
+                    <p>
+                        Основные возможности системы:
+                    </p>
+                    <ul>
+                        <li>Автоматическое определение количества студентов в аудитории через камеру</li>
+                        <li>Привязка статистики к конкретным парам и дням недели</li>
+                        <li>Построение графиков посещаемости</li>
+                        <li>Экспорт статистики</li>
+                    </ul>
+                    <p>
+                        Для полного доступа ко всем функциям системы, включая работу с камерой, 
+                        необходимо запустить систему локально.
+                    </p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

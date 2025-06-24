@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, func
+from sqlalchemy import Column, Integer, String, DateTime, func, Date
 from datetime import datetime
 from app.core.database import Base
 
@@ -16,6 +16,8 @@ class Attendance(Base):
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.now)
     count = Column(Integer)
+    lesson_number = Column(Integer, nullable=True)  # Номер пары
+    date = Column(Date, default=datetime.now().date)  # Дата записи
     
     def to_dict(self):
         """
@@ -24,5 +26,7 @@ class Attendance(Base):
         return {
             "id": self.id,
             "timestamp": self.timestamp.isoformat(),
-            "count": self.count
+            "count": self.count,
+            "lesson_number": self.lesson_number,
+            "date": self.date.isoformat() if self.date else None
         }

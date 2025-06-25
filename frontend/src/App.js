@@ -194,7 +194,7 @@ function App() {
       console.log("Отправляемые данные:", attendanceData);
       
       // Используем полный URL API
-      const apiUrl = "http://10.14.24.35:8000/api/v1/attendance";
+      const apiUrl = "http://10.241.1.170:8000/api/v1/attendance";
       console.log("Отправка данных на:", apiUrl);
       
       const response = await fetch(apiUrl, {
@@ -300,7 +300,7 @@ function App() {
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 секунд таймаут
         
         try {
-          const res = await fetch("http://10.14.24.35:8000/api/v1/detect-image", {
+          const res = await fetch("http://10.241.1.170:8000/api/v1/detect-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: dataUrl }),
@@ -465,7 +465,7 @@ function App() {
       console.log(`Загрузка статистики: дата=${selectedDate}, пара=${selectedLessonNumber}`);
       
       // Формируем URL с параметрами для фильтрации
-      let url = "http://10.14.24.35:8000/api/v1/attendance";
+      let url = "http://10.241.1.170:8000/api/v1/attendance";
       const params = new URLSearchParams();
       
       if (selectedDate) {
@@ -505,7 +505,7 @@ function App() {
         
       // Если выбрана конкретная пара, получаем детальную статистику по ней
       if (selectedLessonNumber !== null) {
-        const lessonStatsUrl = `http://10.14.24.35:8000/api/v1/attendance/lesson-stats?lesson_number=${selectedLessonNumber}${selectedDate ? `&date=${selectedDate}` : ''}`;
+        const lessonStatsUrl = `/api/v1/attendance/lesson-stats?lesson_number=${selectedLessonNumber}${selectedDate ? `&date=${selectedDate}` : ''}`;
         console.log(`Запрос статистики по паре: ${lessonStatsUrl}`);
         
         fetch(lessonStatsUrl)
@@ -520,7 +520,7 @@ function App() {
           });
       } else {
         // Если выбраны "Все пары", получаем общую статистику по парам
-        const dailyStatsUrl = `http://10.14.24.35:8000/api/v1/attendance/daily-stats${selectedDate ? `?date=${selectedDate}` : ''}`;
+        const dailyStatsUrl = `/api/v1/attendance/daily-stats${selectedDate ? `?date=${selectedDate}` : ''}`;
         console.log(`Запрос общей статистики по парам: ${dailyStatsUrl}`);
         
         fetch(dailyStatsUrl)

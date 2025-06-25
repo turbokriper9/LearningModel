@@ -61,6 +61,8 @@ async def detect_live(camera_id: int = Query(0, description="ID камеры (0 
         print(f"Запрос на детекцию с камеры {camera_id}")
         result = detect_people_from_camera(camera_id)
         
+        print(f"Результат детекции: {result}")
+        
         # Проверяем наличие ошибок
         if "error" in result and result["error"]:
             print(f"Ошибка при детекции с камеры {camera_id}: {result['error']}")
@@ -116,19 +118,25 @@ async def detect_image(request: ImageRequest, db: Session = Depends(get_db)):
     global last_count, last_db_save_time
     
     try:
+        print("Получен запрос на обработку изображения")
         # Декодируем base64 изображение
         image_data = request.image.split(',')[1] if ',' in request.image else request.image
         image_bytes = base64.b64decode(image_data)
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
+        print(f"Декодировано изображение размером: {img.shape if img is not None else 'None'}")
+        
         if img is None:
+            print("Ошибка декодирования изображения")
             return {"count": 0, "boxes": [], "error": "Не удалось декодировать изображение"}
         
         # Запускаем детекцию
         result = detect_people_from_image(img)
         current_count = result['count']
         current_time = time.time()
+        
+        print(f"Результат детекции: {result}")
         
         # Корректируем количество для статистики (вычитаем 1)
         adjusted_count = max(0, current_count - 1)
@@ -141,6 +149,8 @@ async def detect_image(request: ImageRequest, db: Session = Depends(get_db)):
                 attendance = Attendance(count=adjusted_count, timestamp=now)
                 db.add(attendance)
                 db.commit()
+                
+                print("Запись успешно сохранена в БД")
                 
                 # Обновляем время последней записи
                 last_db_save_time = current_time

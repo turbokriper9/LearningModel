@@ -33,11 +33,14 @@ for path in model_paths:
             model = YOLO(path)
             print(f"Модель успешно загружена из {path}")
             
-            # Если это стандартная модель YOLOv8n, выводим классы
+            # Выводим информацию о классах модели
+            print("Доступные классы в модели:", model.names)
             if path == "yolov8n.pt":
                 print("Используется стандартная модель YOLOv8n")
-                print("Доступные классы:", model.names)
-                print("Класс 'person' имеет индекс:", list(model.names.keys())[list(model.names.values()).index('person')])
+                if 'person' in model.names.values():
+                    print("Класс 'person' имеет индекс:", list(model.names.keys())[list(model.names.values()).index('person')])
+            else:
+                print("Используется специализированная модель")
             
             break
         except Exception as e:
@@ -177,7 +180,8 @@ def detect_people_from_camera(camera_id=0):
         print(f"Запуск детекции на кадре с камеры {camera_id} размером {frame.shape}")
         
         # Для отладки сохраняем кадр
-        debug_path = f"camera_{camera_id}_debug.jpg"
+        debug_path = f"debug_frames/camera_{camera_id}_frame.jpg"
+        os.makedirs("debug_frames", exist_ok=True)
         cv2.imwrite(debug_path, frame)
         print(f"Сохранено отладочное изображение: {debug_path}")
 
@@ -194,6 +198,7 @@ def detect_people_from_camera(camera_id=0):
         count = 0
         boxes = []
         
+        # Принимаем ВСЕ обнаруженные объекты с минимальным порогом уверенности
         for box in results[0].boxes:
             # Получаем класс объекта и уверенность
             cls_id = int(box.cls[0])
@@ -202,37 +207,31 @@ def detect_people_from_camera(camera_id=0):
             # Выводим информацию о каждом объекте
             print(f"Обнаружен объект на кадре: класс={cls_id}, уверенность={conf:.2f}")
             
-            # Для стандартной модели YOLOv8n фильтруем только людей (класс 0)
-            if "yolov8n.pt" in model_type:
-                if cls_id == 0 and conf > 0.3:  # 0 - класс person в COCO
-                    count += 1
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    boxes.append({"xmin": x1, "ymin": y1, "xmax": x2, "ymax": y2})
-                    print(f"  - Добавлен человек: {x1},{y1} - {x2},{y2}")
+            # Используем крайне низкий порог уверенности для всех классов
+            if conf > 0.1:  # Критически снижаем порог до 0.1, чтобы максимизировать количество детекций
+                count += 1
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                boxes.append({"xmin": x1, "ymin": y1, "xmax": x2, "ymax": y2})
+                print(f"  - Добавлен объект: класс={cls_id}, координаты={x1},{y1} - {x2},{y2}")
             else:
-                # Для специализированной модели берем все обнаруженные объекты с достаточной уверенностью
-                if conf > 0.3:  # Минимальный порог уверенности
-                    count += 1
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    boxes.append({"xmin": x1, "ymin": y1, "xmax": x2, "ymax": y2})
-                    print(f"  - Добавлен объект: {x1},{y1} - {x2},{y2}")
+                print(f"  - Объект отклонен из-за низкой уверенности: {conf:.2f} < 0.1")
         
-        print(f"Итого обнаружено людей на кадре: {count}")
+        print(f"Итого обнаружено объектов на кадре: {count}")
         return {"count": count, "boxes": boxes, "camera_id": camera_id}
     except Exception as e:
-        print(f"Ошибка при обнаружении людей с камеры {camera_id}: {str(e)}")
+        print(f"Ошибка при обнаружении объектов с камеры {camera_id}: {str(e)}")
         traceback.print_exc()
         return {"count": 0, "boxes": [], "error": str(e), "camera_id": camera_id}
 
 def detect_people_from_image(img):
     """
-    Обнаружение людей на загруженном изображении
+    Обнаружение объектов на загруженном изображении
     
     Args:
         img: Изображение в формате numpy array (BGR)
         
     Returns:
-        dict: Словарь с количеством обнаруженных людей и координатами рамок
+        dict: Словарь с количеством обнаруженных объектов и координатами рамок
     """
     global last_result, last_detection_time
     
@@ -280,6 +279,7 @@ def detect_people_from_image(img):
         count = 0
         boxes = []
         
+        # Принимаем ВСЕ обнаруженные объекты с минимальным порогом уверенности
         for box in results[0].boxes:
             # Получаем класс объекта и уверенность
             cls_id = int(box.cls[0])
@@ -288,22 +288,16 @@ def detect_people_from_image(img):
             # Выводим информацию о каждом объекте
             print(f"Обнаружен объект: класс={cls_id}, уверенность={conf:.2f}")
             
-            # Для стандартной модели YOLOv8n фильтруем только людей (класс 0)
-            if "yolov8n.pt" in model_type:
-                if cls_id == 0 and conf > 0.3:  # 0 - класс person в COCO
-                    count += 1
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    boxes.append({"xmin": x1, "ymin": y1, "xmax": x2, "ymax": y2})
-                    print(f"  - Добавлен человек: {x1},{y1} - {x2},{y2}")
+            # Используем крайне низкий порог уверенности для всех классов
+            if conf > 0.1:  # Критически снижаем порог до 0.1, чтобы максимизировать количество детекций
+                count += 1
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                boxes.append({"xmin": x1, "ymin": y1, "xmax": x2, "ymax": y2})
+                print(f"  - Добавлен объект: класс={cls_id}, координаты={x1},{y1} - {x2},{y2}")
             else:
-                # Для специализированной модели берем все обнаруженные объекты с достаточной уверенностью
-                if conf > 0.3:  # Минимальный порог уверенности
-                    count += 1
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    boxes.append({"xmin": x1, "ymin": y1, "xmax": x2, "ymax": y2})
-                    print(f"  - Добавлен объект: {x1},{y1} - {x2},{y2}")
+                print(f"  - Объект отклонен из-за низкой уверенности: {conf:.2f} < 0.1")
         
-        print(f"Итого обнаружено людей: {count}")
+        print(f"Итого обнаружено объектов: {count}")
         result = {"count": count, "boxes": boxes}
         
         # Кэшируем результат только если включено кэширование
@@ -313,6 +307,6 @@ def detect_people_from_image(img):
         
         return result
     except Exception as e:
-        print(f"Ошибка при обнаружении людей на изображении: {str(e)}")
+        print(f"Ошибка при обнаружении объектов на изображении: {str(e)}")
         traceback.print_exc()
         return {"count": 0, "boxes": []}
